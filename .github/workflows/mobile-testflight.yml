@@ -109,6 +109,11 @@ jobs:
           with open('ios/ExportOptions.plist.example', 'rb') as handle:
               options = plistlib.load(handle)
           options['teamID'] = sys.argv[1]
+          options['signingStyle'] = 'manual'
+          options['signingCertificate'] = 'Apple Distribution'
+          options['provisioningProfiles'] = {
+              'kz.pharmacy.app': 'ePharm AppStore Connect 2026',
+          }
           with open('ios/ExportOptions.plist', 'wb') as handle:
               plistlib.dump(options, handle)
           PY
@@ -119,14 +124,20 @@ jobs:
             --dart-define=APP_ENVIRONMENT=production \
             --dart-define="SENTRY_DSN=$SENTRY_MOBILE_DSN" \
             --dart-define=SENTRY_TRACES_SAMPLE_RATE=0.05
-          flutter build ipa --release \
-            --build-name "$VERSION" \
-            --build-number "$BUILD_NUMBER" \
-            --dart-define="RELEASE_ID=$RELEASE_ID" \
-            --dart-define=APP_ENVIRONMENT=production \
-            --dart-define="SENTRY_DSN=$SENTRY_MOBILE_DSN" \
-            --dart-define=SENTRY_TRACES_SAMPLE_RATE=0.05 \
-            --export-options-plist=ios/ExportOptions.plist
+          xcodebuild archive \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            DEVELOPMENT_TEAM="$APPLE_DEVELOPMENT_TEAM" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY='Apple Distribution' \
+            PROVISIONING_PROFILE_SPECIFIER='ePharm AppStore Connect 2026'
+          xcodebuild -exportArchive \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -exportPath build/ios/ipa \
+            -exportOptionsPlist ios/ExportOptions.plist
 
       - name: Upload dSYMs to Sentry
         env:
