@@ -5,6 +5,8 @@ All notable production changes to Epharm are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-09-23
+
 ### Added
 
 - Completed pharmacist course materials end to end: administrators can publish external links,
@@ -14,6 +16,8 @@ All notable production changes to Epharm are recorded here. The format follows
 
 ### Fixed
 
+- Kept the mobile catalog, product details and recommendations available from the durable local
+  snapshot while the external Medusa service is unavailable.
 - Added a bounded mobile API timeout so unavailable services fail with an actionable retry state
   instead of leaving the application waiting indefinitely.
 - POSM 1.0.65 spreads healthy QR-task polling over 24–36 seconds per device, reducing
