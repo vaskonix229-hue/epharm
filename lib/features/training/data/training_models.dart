@@ -329,6 +329,10 @@ class TrainingLesson {
     required this.content,
     required this.kind,
     required this.videoUrl,
+    this.externalUrl,
+    this.requiredLesson = true,
+    this.minimumWatchPct,
+    this.attachments = const <TrainingLessonAttachment>[],
     required this.durationMin,
     required this.order,
   });
@@ -339,10 +343,16 @@ class TrainingLesson {
   final String content;
   final String kind;
   final String? videoUrl;
+  final String? externalUrl;
+  final bool requiredLesson;
+  final int? minimumWatchPct;
+  final List<TrainingLessonAttachment> attachments;
   final int durationMin;
   final int order;
 
   bool get isVideo => kind == 'video';
+  bool get hasVideo => videoUrl?.isNotEmpty ?? false;
+  bool get hasExternalMaterial => externalUrl?.isNotEmpty ?? false;
 
   factory TrainingLesson.fromJson(Map<String, dynamic> json) => TrainingLesson(
         id: json['id'] as String? ?? '',
@@ -351,8 +361,49 @@ class TrainingLesson {
         content: json['content'] as String? ?? '',
         kind: json['kind'] as String? ?? 'text',
         videoUrl: json['videoUrl'] as String?,
+        externalUrl: json['externalUrl'] as String?,
+        requiredLesson: json['required'] as bool? ?? true,
+        minimumWatchPct: json['minimumWatchPct'] == null
+            ? null
+            : _int(json['minimumWatchPct']).clamp(0, 100),
+        attachments: _maps(json['attachments'])
+            .map(TrainingLessonAttachment.fromJson)
+            .toList(growable: false),
         durationMin: _int(json['durationMin']),
         order: _int(json['order']),
+      );
+}
+
+class TrainingLessonAttachment {
+  const TrainingLessonAttachment({
+    required this.id,
+    required this.title,
+    required this.fileName,
+    required this.contentType,
+    required this.mediaUrl,
+    required this.sizeBytes,
+    required this.kind,
+  });
+
+  final String id;
+  final String title;
+  final String fileName;
+  final String contentType;
+  final String mediaUrl;
+  final int sizeBytes;
+  final String kind;
+
+  factory TrainingLessonAttachment.fromJson(Map<String, dynamic> json) =>
+      TrainingLessonAttachment(
+        id: json['id'] as String? ?? '',
+        title: json['title'] as String? ??
+            json['fileName'] as String? ??
+            'Материал',
+        fileName: json['fileName'] as String? ?? '',
+        contentType: json['contentType'] as String? ?? '',
+        mediaUrl: json['mediaUrl'] as String? ?? '',
+        sizeBytes: _int(json['sizeBytes']),
+        kind: json['kind'] as String? ?? 'document',
       );
 }
 

@@ -133,7 +133,10 @@ public sealed class MerchTaskUnavailableException : Exception
 /// </summary>
 public sealed class TaskKioskPollSchedule
 {
-    private static readonly TimeSpan HealthyInterval = TimeSpan.FromSeconds(10);
+    // Assignment delivery tolerates a short delay. A per-poll spread prevents a
+    // synchronized fleet restart from exhausting the merchandising DB pool.
+    private const double HealthyMinimumSeconds = 24;
+    private const double HealthyJitterSeconds = 12;
     private static readonly TimeSpan[] FailureIntervals =
     [
         TimeSpan.FromSeconds(30),
@@ -143,13 +146,19 @@ public sealed class TaskKioskPollSchedule
     ];
 
     private int _failureCount;
+    private readonly Func<double> _randomSample;
 
-    public TimeSpan Initial => HealthyInterval;
+    public TaskKioskPollSchedule(Func<double>? randomSample = null)
+    {
+        _randomSample = randomSample ?? (() => Random.Shared.NextDouble());
+    }
+
+    public TimeSpan Initial => NextHealthyInterval();
 
     public TimeSpan RecordSuccess()
     {
         _failureCount = 0;
-        return HealthyInterval;
+        return NextHealthyInterval();
     }
 
     public TimeSpan RecordFailure()
@@ -157,5 +166,12 @@ public sealed class TaskKioskPollSchedule
         var index = Math.Min(_failureCount, FailureIntervals.Length - 1);
         _failureCount++;
         return FailureIntervals[index];
+    }
+
+    private TimeSpan NextHealthyInterval()
+    {
+        var sample = _randomSample();
+        if (!double.IsFinite(sample)) sample = 0.5;
+        return TimeSpan.FromSeconds(HealthyMinimumSeconds + HealthyJitterSeconds * Math.Clamp(sample, 0, 1));
     }
 }

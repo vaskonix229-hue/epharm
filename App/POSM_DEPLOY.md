@@ -9,7 +9,7 @@ Build on Windows with .NET 10 SDK.
 ```powershell
 cd <repo>
 dotnet publish App\CustomerDisplay.csproj -c Release -r win-x64 --self-contained `
-  -p:Version=1.0.61 -o C:\Epharm\app
+  -p:Version=1.0.65 -o C:\Epharm\app
 ```
 
 Auto-update works with a published app folder containing `CustomerDisplay.exe`, dependencies, LibVLC,
@@ -81,6 +81,11 @@ backend environment. Configure the server with `MERCH_TASKS_BASE_URL`,
 `MERCH_TASKS_INTEGRATION_KEY`, and `MERCH_PORTAL_UPSTREAM`, verify the public `/merch/` portal, then
 set `MERCH_TASKS_ENABLED=true`. Keep it `false` until the server-to-server API and a real task have
 passed smoke testing. Never put the CRM key or a task delivery token in `posm.json` or a release ZIP.
+
+POSM v1.0.65 polls healthy QR assignments every 24–36 seconds with a fresh random spread on each
+cycle. This bounds assignment visibility delay while avoiding simultaneous 10-second polls from a
+large fleet. Failure backoff stays isolated and unchanged; recommendations and orders keep their
+own schedules.
 
 ## One-Click Pharmacy Install
 
@@ -154,8 +159,8 @@ Release flow:
 4. Sign the exact manifest with the offline ECDSA P-256 private key:
 
    ```bash
-   tools/sign-posm-release.sh private-key.pem win-x64 1.0.61 \
-     https://epharm.inkar.kz/downloads/epharm-posm-1.0.61-win-x64.zip release.zip false
+   tools/sign-posm-release.sh private-key.pem win-x64 1.0.65 \
+     https://epharm.inkar.kz/downloads/epharm-posm-1.0.65-win-x64.zip release.zip false
    ```
 
 5. Register `platform`, `version`, `url`, `sha256`, `mandatory` and `manifestSignature` via

@@ -77,6 +77,20 @@ Map<String, dynamic> _assignmentJson({
                 'content': 'Изучите основные понятия.',
                 'kind': 'video',
                 'videoUrl': 'https://epharm.inkar.kz/s3/lesson.mp4',
+                'externalUrl': 'https://epharm.inkar.kz/materials/lesson-1',
+                'required': true,
+                'minimumWatchPct': 80,
+                'attachments': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'id': 'attachment-1',
+                    'title': 'Памятка фармацевта',
+                    'fileName': 'handout.pdf',
+                    'contentType': 'application/pdf',
+                    'mediaUrl': '/media/handout.pdf',
+                    'sizeBytes': 2048,
+                    'kind': 'document',
+                  },
+                ],
                 'durationMin': 12,
                 'order': 0,
                 'createdAt': '2026-08-01T10:00:00Z',
@@ -163,10 +177,26 @@ void main() {
         TrainingStageType.onlineCourse);
     expect(overview.assignments.single.stages.first.course?.title,
         'Основы категории');
-    expect(overview.assignments.single.stages.first.course?.lessons.single.title,
+    expect(
+        overview.assignments.single.stages.first.course?.lessons.single.title,
         'Введение');
-    expect(overview.assignments.single.stages.first.course?.lessons.single.isVideo,
+    expect(
+        overview.assignments.single.stages.first.course?.lessons.single.isVideo,
         isTrue);
+    expect(
+      overview.assignments.single.stages.first.course?.lessons.single
+          .hasExternalMaterial,
+      isTrue,
+    );
+    expect(
+      overview.assignments.single.stages.first.course?.lessons.single
+          .minimumWatchPct,
+      80,
+    );
+    final attachment = overview.assignments.single.stages.first.course?.lessons
+        .single.attachments.single;
+    expect(attachment?.title, 'Памятка фармацевта');
+    expect(attachment?.mediaUrl, '/media/handout.pdf');
     expect(overview.upcomingEvents.single.address, 'Ауэзова 134');
     expect(overview.certificates.single.score, 92);
     expect(overview.notifications.single.id, 'notification-1');

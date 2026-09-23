@@ -164,6 +164,9 @@ const course: CourseDto = {
       content: 'Текст урока',
       kind: 'video',
       videoUrl: 'https://epharm.inkar.kz/s3/course.mp4',
+      externalUrl: 'https://learn.epharm.kz/materials/intro',
+      required: true,
+      minimumWatchPct: 80,
       attachments: [
         {
           id: 'attachment-1',
@@ -230,6 +233,36 @@ const pharmacist: PharmacistDto = {
   coursesTotal: 0,
   status: 'active',
   joinedAt: '2026-08-01',
+  createdAt: '2026-08-01T08:00:00Z',
+  updatedAt: '2026-08-01T08:00:00Z',
+}
+
+const assignment: TrainingAssignmentDto = {
+  id: 'assignment-1',
+  programId: program.id,
+  programVersionId: program.versionId,
+  programVersion: program.version,
+  programName: program.name,
+  programShortDescription: program.shortDescription,
+  coverUrl: null,
+  pharmacistId: pharmacist.id,
+  pharmacistName: pharmacist.name,
+  pharmacyName: pharmacist.pharmacyName,
+  city: pharmacist.city,
+  format: 'online',
+  status: 'not_started',
+  priority: 'normal',
+  required: true,
+  event: null,
+  startsAt: null,
+  dueAt: null,
+  progressPct: 0,
+  score: null,
+  startedAt: null,
+  completedAt: null,
+  stages: [],
+  certificate: null,
+  reward: null,
   createdAt: '2026-08-01T08:00:00Z',
   updatedAt: '2026-08-01T08:00:00Z',
 }
@@ -379,6 +412,9 @@ describe('Обучение — операционный раздел', () => {
       'https://epharm.inkar.kz/s3/handout.pdf',
     )
     expect(screen.getByRole('button', { name: 'Удалить материал Памятка фармацевта' })).toBeInTheDocument()
+    expect(screen.getByDisplayValue('https://learn.epharm.kz/materials/intro')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('80')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Обязательный урок' })).toBeChecked()
   })
 
   it('разрешает роли только на чтение открыть курс без кнопок редактирования', async () => {
@@ -548,6 +584,24 @@ describe('Обучение — операционный раздел', () => {
         duplicatePolicy: 'skip',
       }),
       expect.any(Object),
+    )
+  })
+
+  it('копирует персональную ссылку на назначенный курс', async () => {
+    lmsHooks.useTrainingAssignmentPage.mockReturnValue(
+      queryResult({ items: [assignment], total: 1, page: 0, size: 25, totalPages: 1 }),
+    )
+
+    const user = userEvent.setup()
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText')
+    renderPage()
+    await user.click(screen.getByRole('button', { name: 'Назначения' }))
+    await user.click(
+      screen.getByRole('button', { name: `Скопировать ссылку на курс для ${pharmacist.name}` }),
+    )
+
+    expect(writeText).toHaveBeenCalledWith(
+      new URL('/learn/course/assignment-1', window.location.origin).toString(),
     )
   })
 

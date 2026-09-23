@@ -226,11 +226,14 @@ Production binary releases are mirrored in the public, artifact-only repository
 jsDelivr with an immutable artifact-repository commit, while the GitHub release asset remains an
 independent recovery source. Release archives must never contain `posm.json`, device keys,
 credentials, pharmacy identifiers, or source code. The current bridge archive contains only the
-application executable, DLL, deps file, and runtime config. Before a release becomes current, verify
+application executable, DLL, deps file, runtime config, and the QR dependency DLL. Before a release becomes current, verify
 an anonymous HTTPS download, Range resume, ZIP integrity, exact byte size, and SHA-256 from the final
 CDN URL. Register only a manifest signed by the offline ECDSA P-256 key. `AppUpdater` verifies the
 independently pinned SPKI over platform/version/URL/hash/mandatory before download and then verifies
-the ZIP SHA-256. Pharmacy-specific `C:\Epharm\posm.json` is preserved during the overlay update.
+the ZIP SHA-256. A public P-256 trust anchor is embedded in current clients so older pharmacy
+configs without an explicit SPKI can still verify a signed update. A malformed nonblank override
+fails closed. The installer rejects remote HTTP backend/fallback URLs before reporting success.
+Pharmacy-specific `C:\Epharm\posm.json` is preserved during the overlay update.
 
 ## Merchandising task QR
 
@@ -244,8 +247,13 @@ backend treats merchandising as an optional dependency: timeout, invalid payload
 returns HTTP 200 with `available=false` instead of a gateway error. POSM applies an isolated bounded
 backoff (30 seconds, one, two, then five minutes), marks only the task window offline, and keeps the
 recommendation, heartbeat, and sales channel on its normal backend route.
+From POSM 1.0.65, healthy assignment polls use a fresh 24–36-second jitter instead of a fixed
+10-second interval. This reduces load and synchronized bursts across the fleet; task visibility may
+therefore take up to roughly 36 seconds under healthy connectivity.
 
-The public task portal is routed by Caddy under `/merch/*`. Production values live in `.env.prod`:
+The public task portal is routed by Caddy through exact `/merch/staff` and allowlisted task/media
+paths; CRM admin/auth routes must stay unavailable there. The server-to-server base URL must use
+verified HTTPS when the merchandising service is outside the private INKAR network. Production values live in `.env.prod`:
 `MERCH_TASKS_ENABLED`, `MERCH_TASKS_BASE_URL`, `MERCH_TASKS_INTEGRATION_KEY`,
 `MERCH_TASKS_TIMEOUT_MS`, and `MERCH_PORTAL_UPSTREAM`. Roll out with the bridge disabled first, check
 the internal active-task API and public portal, enable the bridge, then confirm one end-to-end task on

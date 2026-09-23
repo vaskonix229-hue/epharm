@@ -8,6 +8,8 @@ import {
   Clock3,
   Download,
   FileText,
+  ExternalLink,
+  Headphones,
   Image,
   LogOut,
   PlayCircle,
@@ -40,6 +42,9 @@ type Lesson = {
   content?: string
   kind?: string
   videoUrl?: string | null
+  externalUrl?: string | null
+  required?: boolean
+  minimumWatchPct?: number | null
   durationMin?: number
   order?: number
   attachments?: Array<{
@@ -49,7 +54,7 @@ type Lesson = {
     contentType: string
     mediaUrl: string
     sizeBytes: number
-    kind: 'image' | 'video' | 'document'
+    kind: 'image' | 'video' | 'audio' | 'document'
   }>
 }
 
@@ -261,8 +266,13 @@ export default function LearnerTrainingPage() {
   }), [clearSession, persistTokens])
 
   useEffect(() => {
+    const previousTitle = document.title
+    document.title = 'Обучение ePharm'
     document.body.classList.add('learner-portal')
-    return () => document.body.classList.remove('learner-portal')
+    return () => {
+      document.title = previousTitle
+      document.body.classList.remove('learner-portal')
+    }
   }, [])
 
   const loadPortal = useCallback(async (activeTokens: Tokens) => {
@@ -676,9 +686,10 @@ function StageCard({
     [stage.course?.lessons],
   )
   const readLessons = readCompletedLessons(assignmentId)
-  const completedLessonCount = lessons.filter((lesson) => readLessons.has(lesson.id)).length
+  const requiredLessons = lessons.filter((lesson) => lesson.required !== false)
+  const completedLessonCount = requiredLessons.filter((lesson) => readLessons.has(lesson.id)).length
   const completed = stage.status === 'completed' || stage.progressPct >= 100
-  const canComplete = !completed && lessons.every((lesson) => readLessons.has(lesson.id))
+  const canComplete = !completed && requiredLessons.every((lesson) => readLessons.has(lesson.id))
 
   return (
     <section className="overflow-hidden rounded-2xl bg-white shadow-card">
@@ -718,8 +729,8 @@ function StageCard({
       {!completed && (
         <div className="border-t border-ink-100 bg-paper-hover p-5 sm:flex sm:items-center sm:justify-between sm:gap-4">
           <p className="mb-3 text-xs font-semibold text-ink-500 sm:mb-0">
-            {lessons.length > 0 && completedLessonCount < lessons.length
-              ? `Отметьте изученными все уроки: ${completedLessonCount} из ${lessons.length}`
+            {requiredLessons.length > 0 && completedLessonCount < requiredLessons.length
+              ? `Изучите обязательные уроки: ${completedLessonCount} из ${requiredLessons.length}`
               : 'После подтверждения прогресс сохранится в ePharm.'}
           </p>
           <button className="btn btn-primary btn-md w-full sm:w-auto" disabled={busy || !canComplete} onClick={onComplete}>
@@ -775,7 +786,11 @@ function LessonPage({
       onOpenLesson(next.id)
       return
     }
-    await onComplete(currentStage)
+    const completedLessons = readCompletedLessons(assignment.id)
+    const allRequiredComplete = lessons
+      .filter((item) => item.required !== false)
+      .every((item) => completedLessons.has(item.id))
+    if (allRequiredComplete) await onComplete(currentStage)
     onBack()
   }
 
@@ -794,6 +809,10 @@ function LessonPage({
           <div className="mt-4 flex flex-wrap gap-2">
             <span className="chip chip-ink"><Clock3 size={14} /> {lesson.durationMin ?? 0} мин</span>
             {lesson.videoUrl && <span className="chip chip-green"><PlayCircle size={14} /> Видеоурок</span>}
+            <span className="chip chip-ink">{lesson.required === false ? 'Необязательный' : 'Обязательный'}</span>
+            {lesson.minimumWatchPct != null && (
+              <span className="chip chip-blue">Просмотр от {lesson.minimumWatchPct}%</span>
+            )}
             {attachments.length > 0 && <span className="chip chip-blue"><FileText size={14} /> {attachments.length} материалов</span>}
           </div>
         </header>
@@ -813,6 +832,20 @@ function LessonPage({
             </section>
           )}
 
+          {lesson.externalUrl && (
+            <section>
+              <h3 className="mb-3 text-base font-extrabold text-ink-900">Внешний материал</h3>
+              <a
+                className="btn btn-outline btn-md w-full sm:w-auto"
+                href={lesson.externalUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <ExternalLink size={18} /> Открыть материал
+              </a>
+            </section>
+          )}
+
           {attachments.length > 0 && (
             <section>
               <h3 className="mb-3 text-base font-extrabold text-ink-900">Дополнительные материалы</h3>
@@ -828,6 +861,13 @@ function LessonPage({
                       <video controls preload="metadata" className="aspect-video w-full rounded-lg bg-ink-900" src={attachment.mediaUrl} />
                       <div className="mt-2 text-sm font-bold text-ink-700">{attachment.title}</div>
                     </div>
+                  ) : attachment.kind === 'audio' ? (
+                    <div key={attachment.id} className="rounded-xl border border-ink-100 p-4">
+                      <div className="mb-3 flex items-center gap-2 text-sm font-bold text-ink-700">
+                        <Headphones size={18} /> {attachment.title}
+                      </div>
+                      <audio controls preload="metadata" className="w-full" src={attachment.mediaUrl} />
+                    </div>
                   ) : (
                     <a key={attachment.id} href={attachment.mediaUrl} target="_blank" rel="noreferrer" download className="flex items-center gap-3 rounded-xl border border-ink-100 p-4 hover:bg-paper-hover">
                       <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-blue-100 text-brand-blue-600"><FileText size={20} /></span>
@@ -840,7 +880,7 @@ function LessonPage({
             </section>
           )}
 
-          {!lesson.content && !lesson.videoUrl && attachments.length === 0 && (
+          {!lesson.content && !lesson.videoUrl && !lesson.externalUrl && attachments.length === 0 && (
             <div className="rounded-xl bg-paper-hover p-5 text-sm text-ink-500">Материалы этого урока пока не добавлены.</div>
           )}
         </div>
@@ -882,7 +922,10 @@ function LessonRow({
         </span>
         <span className="min-w-0 flex-1">
           <span className="block font-extrabold text-ink-900">{lesson.title}</span>
-          <span className="mt-1 block text-xs font-semibold text-ink-400">{lesson.durationMin ? `${lesson.durationMin} мин` : 'Учебный материал'}</span>
+          <span className="mt-1 block text-xs font-semibold text-ink-400">
+            {lesson.durationMin ? `${lesson.durationMin} мин` : 'Учебный материал'}
+            {lesson.required === false ? ' · необязательный' : ''}
+          </span>
         </span>
         <ChevronDown className="-rotate-90 shrink-0 text-ink-400" size={20} />
       </button>

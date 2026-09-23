@@ -1,5 +1,6 @@
 package kz.epharm.merchtasks.service
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import java.net.URI
@@ -12,6 +13,7 @@ import kz.epharm.shared.error.ErrorCode
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
+import org.springframework.http.MediaType
 import org.springframework.http.client.SimpleClientHttpRequestFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
@@ -23,6 +25,7 @@ import org.springframework.web.client.RestClientResponseException
  */
 @Component
 class MerchTaskClient(
+    private val objectMapper: ObjectMapper,
     @Value("\${app.merch-tasks.enabled:false}") private val enabled: Boolean,
     @Value("\${app.merch-tasks.base-url:}") private val baseUrl: String,
     @Value("\${app.merch-tasks.integration-key:}") private val integrationKey: String,
@@ -32,7 +35,7 @@ class MerchTaskClient(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val requestTimeoutMs = timeoutMs.coerceIn(MIN_TIMEOUT_MS, MAX_TIMEOUT_MS)
-    private val configured get() = baseUrl.isNotBlank() && integrationKey.isNotBlank()
+    private val configured get() = baseUrl.isNotBlank() && integrationKey.isNotBlank() && trustedTransport(baseUrl)
     private val trustedPortal = URI.create(publicBaseUrl.trimEnd('/') + "/merch/")
     private val counters = mutableMapOf<Pair<String, String>, Counter>()
     private val registry = meterRegistry
@@ -78,9 +81,14 @@ class MerchTaskClient(
         if (!enabled) return MerchTaskDeliveryResult()
         if (!configured) return MerchTaskDeliveryResult(available = false)
         return upstream("shown", MerchTaskDeliveryResult(available = false)) {
+            // The fallback merchandising service uses Python's BaseHTTPRequestHandler, which
+            // consumes bodies by Content-Length and does not decode HTTP chunked bodies. An
+            // explicit byte array keeps this contract deterministic on both deployment targets.
+            val body = objectMapper.writeValueAsBytes(payload)
             rest.post()
                 .uri("/api/integrations/pharmapay/tasks/shown")
-                .body(payload)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(body)
                 .retrieve()
                 .body(MerchTaskDeliveryResult::class.java)
                 ?: MerchTaskDeliveryResult()
@@ -136,6 +144,31 @@ class MerchTaskClient(
         val SAFE_PHARMACY_ID = Regex("[0-9A-Za-z._:+@/-]+")
         val SAFE_ID = Regex("[0-9A-Za-z._:+@/-]+")
         val SAFE_TOKEN = Regex("[0-9A-Za-z._~+/=-]+")
+
+        /** A server credential must never cross the public Internet over plain HTTP. */
+        fun trustedTransport(rawBaseUrl: String): Boolean {
+            return try {
+                val uri = URI.create(rawBaseUrl)
+                val host = uri.host ?: return false
+                if (uri.userInfo != null || uri.rawQuery != null || uri.rawFragment != null ||
+                    (uri.rawPath != null && uri.rawPath !in setOf("", "/"))
+                ) return false
+                when (uri.scheme?.lowercase()) {
+                    "https" -> true
+                    "http" -> host.equals("localhost", ignoreCase = true) ||
+                        host == "127.0.0.1" || host == "[::1]" ||
+                        host.split('.').mapNotNull { it.toIntOrNull() }.let { octets ->
+                            octets.size == 4 && octets.all { it in 0..255 } &&
+                                (octets[0] == 10 ||
+                                    octets[0] == 172 && octets[1] in 16..31 ||
+                                    octets[0] == 192 && octets[1] == 168)
+                        }
+                    else -> false
+                }
+            } catch (_: IllegalArgumentException) {
+                false
+            }
+        }
 
         fun effectivePort(uri: URI): Int = when {
             uri.port >= 0 -> uri.port

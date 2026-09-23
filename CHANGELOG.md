@@ -5,7 +5,50 @@ All notable production changes to Epharm are recorded here. The format follows
 
 ## [Unreleased]
 
-## [0.1.8] - 2026-09-21
+### Added
+
+- Completed pharmacist course materials end to end: administrators can publish external links,
+  interactive content, downloadable attachments, required lessons and minimum video-view targets;
+  the mobile app now renders and opens every published material.
+- Added local search and operational sorting to the pharmacist training list.
+
+### Fixed
+
+- Added a bounded mobile API timeout so unavailable services fail with an actionable retry state
+  instead of leaving the application waiting indefinitely.
+- POSM 1.0.65 spreads healthy QR-task polling over 24–36 seconds per device, reducing
+  synchronized load on the merchandising fallback without changing recommendations or orders.
+
+## [0.1.10] - 2026-09-23
+
+### Fixed
+
+- Corrected the public merchandising QR portal's `/merch/staff` asset, task API and media paths;
+  limited the ePharm proxy to staff-only routes and required a trusted transport for its service key.
+- Bound the POSM offline fulfillment cache to the pharmacy and device so a reassigned cash desk cannot
+  display another pharmacy's cached orders. POSM source is versioned 1.0.64 for a separately signed release.
+- Validated POSM installer HTTPS and release trust-anchor settings before completing installation.
+
+### Operations
+
+- Added reproducible checks for preserving merchandising photo sidecars across a frontend build,
+  atomic `dist` exchange and rollback, and immutable application release preparation.
+
+## [0.1.9] - 2026-09-22
+
+### Fixed
+
+- Merchandising QR delivery receipts now use an explicit JSON byte body with `Content-Length`,
+  keeping the ePharm bridge compatible with the fallback Python service while preserving the
+  fail-open isolation of recommendations, heartbeats, sales and other POSM schedules.
+
+## [0.1.8] - 2026-09-22
+
+### Added
+
+- Integrated pharmacy merchandising assignments with POSM through an authenticated, fail-open
+  task bridge: a configured pharmacy receives the task QR without blocking recommendations when
+  the merchandising service is unavailable.
 
 ### Fixed
 

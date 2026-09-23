@@ -124,4 +124,28 @@ void main() {
     expect(find.text('Срок обучения истекает'), findsOneWidget);
     expect(find.text('Завершите программу до завтра'), findsOneWidget);
   });
+
+  testWidgets('training screen filters programs without a server round-trip',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          currentUserProvider.overrideWith(_LoggedInUser.new),
+          trainingOverviewProvider.overrideWith((ref) async => _overview),
+        ],
+        child: const MaterialApp(home: TrainingScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'несуществующая');
+    await tester.pump();
+
+    expect(find.text('Безопасная рекомендация продукта'), findsNothing);
+    expect(find.text('По вашему запросу ничего не найдено'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Очистить поиск'));
+    await tester.pump();
+    expect(find.text('Безопасная рекомендация продукта'), findsOneWidget);
+  });
 }

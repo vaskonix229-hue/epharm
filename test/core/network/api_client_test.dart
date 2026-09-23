@@ -28,6 +28,29 @@ void main() {
       expect(res['ok'], true);
     });
 
+    test('зависший запрос завершается понятной сетевой ошибкой', () async {
+      final client = ApiClient(
+        TokenStore(),
+        baseUrl: 'http://t',
+        requestTimeout: const Duration(milliseconds: 10),
+        client: MockClient((req) async {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+          return _json({'ok': true}, 200);
+        }),
+      );
+
+      await expectLater(
+        () => client.getJson('/slow', auth: false),
+        throwsA(
+          isA<ApiException>().having(
+            (error) => error.message,
+            'message',
+            'Ошибка сети. Проверьте подключение и попробуйте ещё раз.',
+          ),
+        ),
+      );
+    });
+
     test('сетевая ошибка HTTPS → повтор через резервный HTTPS origin',
         () async {
       final requestedOrigins = <String>[];

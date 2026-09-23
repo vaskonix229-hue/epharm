@@ -48,6 +48,34 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Test ACC order bridge contract
+        run: |
+          node --check ops/acc-order-bridge/scripts/sync-epharm-orders.mjs
+          node --check ops/acc-order-bridge/scripts/probe-epharm-orders.mjs
+          node --check ops/acc-order-bridge/scripts/configure-pilot.mjs
+          node --check ops/acc-order-bridge/scripts/configure-rollout.mjs
+          node --test ops/acc-order-bridge/tests/*.test.mjs
+      - name: Verify merchandising portal proxy isolation
+        run: |
+          node --check ops/merch-portal-patches/strip-demo-autofill.mjs
+          node --check ops/merch-portal-patches/test-caddy-routes.mjs
+          node --check ops/merch-portal-patches/preserve-dist-sidecars.mjs
+          node --test ops/merch-portal-patches/test-preserve-dist-sidecars.mjs
+          python3 ops/merch-portal-patches/test-exchange-dist.py
+          docker run --rm \
+            -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            -e ADMIN_DOMAIN=epharm.example.test \
+            -e API_DOMAIN=epharm.example.test \
+            -e S3_DOMAIN=epharm.example.test \
+            -e ACME_EMAIL=ci@example.test \
+            -e MERCH_PORTAL_UPSTREAM=https://merch.example.test:8443 \
+            caddy:2-alpine caddy adapt --config /etc/caddy/Caddyfile \
+            | node ops/merch-portal-patches/test-caddy-routes.mjs
+      - name: Verify immutable release handoff
+        run: bash tools/release/tests/prepare-deploy-contract.sh
       - name: Validate shell syntax and executable bits
         run: |
           find tools ops load-tests -type f \( -name '*.sh' -o -name '*.bash' \) -print0 | xargs -0 -n1 bash -n
@@ -332,6 +360,9 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
+      - name: Validate POSM installer preflight
+        shell: pwsh
+        run: ./App.Tests/InstallTasksPreflight.Tests.ps1
       - run: dotnet build App/CustomerDisplay.csproj -c Release -p:EnableWindowsTargeting=true
       - name: Publish commit-bound POSM bridge
         shell: pwsh

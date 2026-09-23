@@ -1,5 +1,5 @@
 import { useDeferredValue, useMemo, useState } from 'react'
-import { Eye, QrCode } from 'lucide-react'
+import { Copy, Eye, QrCode } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import {
   Button,
@@ -640,6 +640,16 @@ function AssignmentsTab({
     }
   }
 
+  const copyLearnerLink = async (assignment: TrainingAssignmentDto) => {
+    const url = new URL(`/learn/course/${assignment.id}`, window.location.origin).toString()
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.push(`Ссылка для ${assignment.pharmacistName} скопирована`)
+    } catch {
+      toast.push('Не удалось скопировать ссылку на курс')
+    }
+  }
+
   if (pageQuery.isLoading) return <LoadingBlock label="Загружаем назначения…" />
   return (
     <TableSection
@@ -747,11 +757,20 @@ function AssignmentsTab({
                 </span>
               </td>
               <td className="px-5 py-3 text-right">
-                {canManage && assignment.status !== 'cancelled' && (
-                  <Button size="sm" variant="outline" onClick={() => onChangeFormat(assignment)}>
-                    Сменить формат
-                  </Button>
-                )}
+                <div className="flex items-center justify-end gap-1">
+                  <IconButton
+                    tip="Скопировать ссылку для фармацевта"
+                    aria-label={`Скопировать ссылку на курс для ${assignment.pharmacistName}`}
+                    onClick={() => void copyLearnerLink(assignment)}
+                  >
+                    <Copy size={16} />
+                  </IconButton>
+                  {canManage && assignment.status !== 'cancelled' && (
+                    <Button size="sm" variant="outline" onClick={() => onChangeFormat(assignment)}>
+                      Сменить формат
+                    </Button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}

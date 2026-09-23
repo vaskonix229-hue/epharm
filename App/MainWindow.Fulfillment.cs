@@ -45,7 +45,10 @@ namespace CustomerDisplay
             {
                 _fulfillmentClient = new FulfillmentClient(_posmConfig, Log);
                 _fulfillmentCredentialStore = new FulfillmentCredentialStore(_posmConfig.FulfillmentCredentialPath);
-                _fulfillmentCache = new FulfillmentOrderCache(_posmConfig.FulfillmentCachePath);
+                _fulfillmentCache = new FulfillmentOrderCache(
+                    _posmConfig.FulfillmentCachePath,
+                    _posmConfig.PharmacyId,
+                    _posmConfig.ResolveDeviceId());
                 foreach (var order in _fulfillmentCache.Load().Where(x => x.IsActive))
                 {
                     _fulfillmentOrders[order.OrderId] = order;

@@ -2,8 +2,11 @@ package kz.epharm.mobile.catalog
 
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kz.epharm.medusa.MedusaCatalogCache
+import kz.epharm.medusa.MedusaCatalogSnapshotRepository
 import kz.epharm.medusa.client.MedusaClient
+import kz.epharm.medusa.dto.MedusaCategory
 import kz.epharm.medusa.dto.MedusaProduct
 import kz.epharm.medusa.dto.MedusaProductListResponse
 import kz.epharm.mobile.catalog.service.MobileCatalogService
@@ -42,7 +45,10 @@ class MobileCatalogServiceTest {
     private val ruleRepo = mockk<RuleRepository>(relaxed = true).also {
         every { it.findAllByStatusRawOrderByUpdatedAtDesc(any()) } returns emptyList()
     }
-    private val service = MobileCatalogService(medusa, MedusaCatalogCache(0), promoRepo, ruleRepo)
+    private val snapshot = mockk<MedusaCatalogSnapshotRepository>(relaxed = true).also {
+        every { it.hasCompleteSnapshot() } returns false
+    }
+    private val service = MobileCatalogService(medusa, MedusaCatalogCache(0), promoRepo, ruleRepo, snapshot)
 
     private fun stubList(vararg products: MedusaProduct) {
         every { medusa.listProducts(any(), any(), any(), any(), any()) } returns
@@ -61,6 +67,64 @@ class MobileCatalogServiceTest {
             it.medusaProductId = productId
             it.tiers = listOf(PromoTier(1, 500, 0), PromoTier(10, 600, bonus))
         }
+
+    // ── Полная деградация Medusa на PostgreSQL-снимок ───────────────────────
+
+    @Test
+    fun `category search uses complete snapshot without Medusa`() {
+        every { snapshot.hasCompleteSnapshot() } returns true
+        every { snapshot.search(null, "pcat_cold", 24, 0) } returns
+            MedusaCatalogSnapshotRepository.Page(
+                products = listOf(MedusaProduct(id = "P", title = "Ибуфен")),
+                total = 1,
+            )
+
+        val page = service.search(q = null, category = "pcat_cold", limit = 24, offset = 0)
+
+        assertEquals(1, page.total)
+        assertEquals("P", page.items.single().id)
+        verify(exactly = 0) { medusa.listProducts(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `detail uses complete snapshot without Medusa`() {
+        every { snapshot.hasCompleteSnapshot() } returns true
+        every { snapshot.findById("prod_snapshot") } returns
+            MedusaProduct(id = "prod_snapshot", title = "Карточка из снимка")
+
+        val detail = service.detail("prod_snapshot")
+
+        assertEquals("Карточка из снимка", detail.name)
+        verify(exactly = 0) { medusa.getProduct(any()) }
+    }
+
+    @Test
+    fun `categories use complete snapshot without Medusa`() {
+        every { snapshot.hasCompleteSnapshot() } returns true
+        every { snapshot.categories() } returns listOf(
+            MedusaCategory(id = "pcat_cold", name = "Простуда", handle = "cold"),
+        )
+
+        val categories = service.categories()
+
+        assertEquals(1, categories.size)
+        assertEquals("pcat_cold", categories.single().id)
+        verify(exactly = 0) { medusa.listCategories() }
+    }
+
+    @Test
+    fun `recommendations resolve cards from complete snapshot without Medusa`() {
+        every { ruleRepo.findAllByStatusRawOrderByUpdatedAtDesc(RuleStatus.active.name) } returns
+            listOf(rule("c_snapshot", recommend = "B", type = RuleType.crosssell, bonus = 80, trigger = "X"))
+        every { snapshot.hasCompleteSnapshot() } returns true
+        every { snapshot.findByIds(listOf("B")) } returns
+            listOf(MedusaProduct(id = "B", title = "Товар B"))
+
+        val recommendations = service.recommendations("X", includeIncentive = true)
+
+        assertEquals("B", recommendations.crosssells.single().product.id)
+        verify(exactly = 0) { medusa.listProducts(any(), any(), any(), any(), any()) }
+    }
 
     // ── Группировка рекомендаций (п.1/п.7) ───────────────────────────────────
 

@@ -8,7 +8,20 @@ import jakarta.persistence.PreUpdate
 import jakarta.persistence.Table
 import java.time.Instant
 
-enum class CourseLessonKind { text, video }
+enum class CourseLessonKind {
+    text,
+    video,
+    pdf,
+    presentation,
+    image,
+    audio,
+    link,
+    interactive,
+    quiz,
+    test,
+    practice,
+    assignment,
+}
 
 @Entity
 @Table(name = "course_lessons")
@@ -34,6 +47,15 @@ class CourseLessonEntity(
 
     @Column(name = "video_url", length = 1000)
     var videoUrl: String? = null,
+
+    @Column(name = "external_url", length = 2000)
+    var externalUrl: String? = null,
+
+    @Column(name = "required_lesson", nullable = false)
+    var requiredLesson: Boolean = true,
+
+    @Column(name = "minimum_watch_pct")
+    var minimumWatchPct: Int? = null,
 
     @Column(name = "duration_min", nullable = false)
     var durationMin: Int = 0,

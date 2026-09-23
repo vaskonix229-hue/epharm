@@ -30,16 +30,52 @@
 		file_server
 	}
 
-	# Public HTTPS portal opened by merchandising QR codes. handle_path removes
-	# /merch before proxying so the upstream SPA and its relative API routes share
-	# the trusted ePharm origin. The server-to-server key is never sent here.
-	@private_merch path /merch/api/integrations/* /merch/actuator/* /merch/v3/api-docs* /merch/swagger-ui/*
-	handle @private_merch {
-		respond 404
-	}
-	handle_path /merch/* {
-		reverse_proxy {$MERCH_PORTAL_UPSTREAM:10.10.1.80:8080} {
-			header_up -X-Pharmapay-Key
+	# QR staff portal only. The merchandising admin/API remains private: unknown
+	# paths and methods are denied before the /merch prefix is removed. The
+	# server-to-server credential is never forwarded to a browser route.
+	handle /merch/* {
+		route {
+			@merch_staff {
+				path /merch/staff
+				method GET
+			}
+			@merch_assets {
+				path /merch/assets/* /merch/pharmacy-shelf.png
+				method GET
+			}
+			@merch_task_api {
+				path /merch/api/public/task-dispatch /merch/api/public/task-dispatch/queue /merch/api/public/task-dispatch/start /merch/api/public/task-dispatch/checklist /merch/api/public/task-dispatch/evidence /merch/api/public/task-dispatch/submit
+				method POST
+			}
+			@merch_media {
+				path /merch/api/task-files/* /merch/api/request-item-files/* /merch/api/placement-files/*
+				method GET
+			}
+			handle @merch_staff {
+				uri strip_prefix /merch
+				reverse_proxy {$MERCH_PORTAL_UPSTREAM:10.10.1.80:8080} {
+					header_up -X-Pharmapay-Key
+				}
+			}
+			handle @merch_assets {
+				uri strip_prefix /merch
+				reverse_proxy {$MERCH_PORTAL_UPSTREAM:10.10.1.80:8080} {
+					header_up -X-Pharmapay-Key
+				}
+			}
+			handle @merch_task_api {
+				uri strip_prefix /merch
+				reverse_proxy {$MERCH_PORTAL_UPSTREAM:10.10.1.80:8080} {
+					header_up -X-Pharmapay-Key
+				}
+			}
+			handle @merch_media {
+				uri strip_prefix /merch
+				reverse_proxy {$MERCH_PORTAL_UPSTREAM:10.10.1.80:8080} {
+					header_up -X-Pharmapay-Key
+				}
+			}
+			respond 404
 		}
 	}
 

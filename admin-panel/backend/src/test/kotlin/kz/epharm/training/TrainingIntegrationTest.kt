@@ -145,6 +145,9 @@ class TrainingIntegrationTest {
                 description = "Основные понятия",
                 content = "Текст учебного материала",
                 videoUrl = "https://epharm.inkar.kz/s3/training-intro.mp4",
+                externalUrl = "https://learn.epharm.kz/materials/intro",
+                requiredLesson = true,
+                minimumWatchPct = 80,
                 durationMin = 8,
                 order = 0,
             ).also { it.kind = CourseLessonKind.video },
@@ -219,6 +222,9 @@ class TrainingIntegrationTest {
             .andExpect(jsonPath("$.stages[0].course.title").value("Основы продукта"))
             .andExpect(jsonPath("$.stages[0].course.lessons[0].title").value("Введение"))
             .andExpect(jsonPath("$.stages[0].course.lessons[0].kind").value("video"))
+            .andExpect(jsonPath("$.stages[0].course.lessons[0].externalUrl").value("https://learn.epharm.kz/materials/intro"))
+            .andExpect(jsonPath("$.stages[0].course.lessons[0].required").value(true))
+            .andExpect(jsonPath("$.stages[0].course.lessons[0].minimumWatchPct").value(80))
             .andExpect(
                 jsonPath("$.stages[0].course.lessons[0].videoUrl")
                     .value("https://epharm.inkar.kz/s3/training-intro.mp4"),

@@ -64,8 +64,70 @@ describe('learner training portal', () => {
     expect(code).toHaveValue('1234')
   })
 
+  it('keeps a direct assigned-course link through SMS login', async () => {
+    const assignment = {
+      id: 'assignment-link',
+      programName: 'Назначенный курс',
+      pharmacyName: 'Ауэзова 134',
+      city: 'Алматы',
+      status: 'in_progress',
+      format: 'online',
+      progressPct: 0,
+      startedAt: '2026-09-01T10:00:00Z',
+      stages: [],
+    }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input)
+      if (path === '/api/mobile/auth/sms/request') return json({ accepted: true })
+      if (path === '/api/mobile/auth/sms/verify') {
+        return json({
+          registered: true,
+          tokens,
+          pharmacist: {
+            id: 'ph-1',
+            name: 'Айжан',
+            phone: '+77070000000',
+            pharmacyName: 'Ауэзова 134',
+            city: 'Алматы',
+          },
+        })
+      }
+      if (path === '/api/mobile/auth/me') {
+        return json({
+          id: 'ph-1',
+          name: 'Айжан',
+          phone: '+77070000000',
+          pharmacyName: 'Ауэзова 134',
+          city: 'Алматы',
+        })
+      }
+      if (path === '/api/mobile/training') {
+        return json({ total: 1, inProgress: 1, completed: 0, overdue: 0, assignments: [assignment] })
+      }
+      if (path === '/api/mobile/training/assignments/assignment-link') return json(assignment)
+      return json({ message: `Unexpected request: ${path}` }, 500)
+    })
+
+    renderPortal('/learn/course/assignment-link')
+    const user = userEvent.setup()
+    await user.clear(screen.getByRole('textbox', { name: 'Номер телефона' }))
+    await user.type(screen.getByRole('textbox', { name: 'Номер телефона' }), '77770000000')
+    await user.click(screen.getByRole('button', { name: 'Получить код' }))
+    await user.type(screen.getByRole('textbox', { name: 'Код из SMS' }), '1234')
+    await user.click(screen.getByRole('button', { name: 'Войти' }))
+
+    expect(await screen.findByRole('heading', { name: 'Назначенный курс' })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/mobile/training/assignments/assignment-link',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: `Bearer ${tokens.accessToken}` }),
+      }),
+    )
+  })
+
   it('completes the current stage after its final lesson', async () => {
     sessionStorage.setItem('epharm.learner.tokens', JSON.stringify(tokens))
+    localStorage.setItem('epharm.learner.read.assignment-1', JSON.stringify(['lesson-1']))
     const assignment = {
       id: 'assignment-1',
       programName: 'Безопасная работа',
@@ -86,8 +148,15 @@ describe('learner training portal', () => {
             id: 'course-1',
             title: 'Основы',
             lessons: [
-              { id: 'lesson-1', title: 'Первый', order: 0, attachments: [] },
-              { id: 'lesson-2', title: 'Второй', order: 1, attachments: [] },
+              { id: 'lesson-1', title: 'Первый', order: 0, required: true, attachments: [] },
+              {
+                id: 'lesson-2',
+                title: 'Второй',
+                order: 1,
+                required: true,
+                externalUrl: 'https://learn.example.org/final',
+                attachments: [],
+              },
             ],
           },
         },
@@ -110,6 +179,10 @@ describe('learner training portal', () => {
 
     renderPortal('/learn/course/assignment-1/lesson/lesson-2')
     expect(await screen.findByRole('heading', { name: 'Второй' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Открыть материал' })).toHaveAttribute(
+      'href',
+      'https://learn.example.org/final',
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Завершить курс' }))
 
     await waitFor(() => {

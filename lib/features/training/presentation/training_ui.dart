@@ -77,6 +77,50 @@ IconData stageIcon(TrainingStageType type) => switch (type) {
       TrainingStageType.manualReview => Icons.fact_check_outlined,
     };
 
+String lessonKindLabel(String kind) => switch (kind) {
+      'video' => 'Видео',
+      'pdf' => 'PDF',
+      'presentation' => 'Презентация',
+      'image' => 'Изображение',
+      'audio' => 'Аудио',
+      'link' => 'Ссылка',
+      'interactive' => 'Интерактив',
+      'quiz' || 'test' => 'Тест',
+      'practice' || 'assignment' => 'Задание',
+      _ => 'Материал',
+    };
+
+IconData lessonKindIcon(String kind) => switch (kind) {
+      'video' => Icons.play_circle_outline_rounded,
+      'pdf' => Icons.picture_as_pdf_outlined,
+      'presentation' => Icons.slideshow_outlined,
+      'image' => Icons.image_outlined,
+      'audio' => Icons.headphones_outlined,
+      'link' => Icons.link_rounded,
+      'interactive' => Icons.touch_app_outlined,
+      'quiz' || 'test' => Icons.quiz_outlined,
+      'practice' || 'assignment' => Icons.assignment_outlined,
+      _ => Icons.article_outlined,
+    };
+
+IconData lessonAttachmentIcon(TrainingLessonAttachment attachment) {
+  if (attachment.kind == 'image' ||
+      attachment.contentType.startsWith('image/')) {
+    return Icons.image_outlined;
+  }
+  if (attachment.kind == 'video' ||
+      attachment.contentType.startsWith('video/')) {
+    return Icons.play_circle_outline_rounded;
+  }
+  if (attachment.contentType.startsWith('audio/')) {
+    return Icons.headphones_outlined;
+  }
+  if (attachment.contentType == 'application/pdf') {
+    return Icons.picture_as_pdf_outlined;
+  }
+  return Icons.attach_file_rounded;
+}
+
 String trainingDate(DateTime? value, {bool withTime = false}) {
   if (value == null) return 'Не указано';
   final day = value.day.toString().padLeft(2, '0');

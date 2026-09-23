@@ -140,6 +140,31 @@ class AdminStorefrontIntegrationTest {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.total").value(1))
             .andExpect(jsonPath("$.items[0].name").value("Ибуфен суспензия для детей"))
+
+        // Mobile category browsing, category directory and product detail must use
+        // the same durable snapshot instead of requiring a live Medusa request.
+        mockMvc.perform(
+            get("/api/mobile/catalog/products")
+                .param("category", "pcat_cold"),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.total").value(1))
+            .andExpect(jsonPath("$.items[0].id").value("prod_ibufen"))
+
+        mockMvc.perform(get("/api/mobile/catalog/categories"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$[0].id").value("pcat_cold"))
+            .andExpect(jsonPath("$[0].name").value("Простуда"))
+
+        mockMvc.perform(get("/api/mobile/catalog/products/prod_ibufen"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.id").value("prod_ibufen"))
+            .andExpect(jsonPath("$.name").value("Ибуфен суспензия для детей"))
+
+        mockMvc.perform(get("/api/mobile/catalog/recommendation-pools"))
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.alternatives.length()").value(0))
+            .andExpect(jsonPath("$.crosssells.length()").value(0))
     }
 
     @Test

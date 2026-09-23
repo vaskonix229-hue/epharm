@@ -1,7 +1,7 @@
 name: pharmacy
 description: Epharm — Flutter app for pharmacists (bonuses, training, AI exam).
 publish_to: 'none'
-version: 0.1.2+4
+version: 0.1.11+6
 
 environment:
   sdk: ^3.5.0

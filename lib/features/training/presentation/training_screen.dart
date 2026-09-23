@@ -31,6 +31,14 @@ class TrainingScreen extends ConsumerStatefulWidget {
 
 class _TrainingScreenState extends ConsumerState<TrainingScreen> {
   _TrainingFilter _filter = _TrainingFilter.active;
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,8 +66,12 @@ class _TrainingScreenState extends ConsumerState<TrainingScreen> {
               .toList(),
           _TrainingFilter.completed =>
             data.assignments.where((item) => item.isCompleted).toList(),
-          _TrainingFilter.all => data.assignments,
+          _TrainingFilter.all => List<TrainingAssignment>.of(data.assignments),
         };
+        assignments.sort(_compareAssignments);
+        final visibleAssignments = _query.trim().isEmpty
+            ? assignments
+            : assignments.where(_matchesQuery).toList(growable: false);
         return RefreshIndicator(
           color: AppColors.brandGreen700,
           onRefresh: () async {
@@ -113,6 +125,40 @@ class _TrainingScreenState extends ConsumerState<TrainingScreen> {
               const SizedBox(height: AppSpacing.s24),
               const _SectionTitle(title: 'Мои программы'),
               const SizedBox(height: AppSpacing.s12),
+              TextField(
+                controller: _searchController,
+                textInputAction: TextInputAction.search,
+                onChanged: (value) => setState(() => _query = value),
+                decoration: InputDecoration(
+                  hintText: 'Найти программу',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: _query.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Очистить поиск',
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _query = '');
+                          },
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: AppRadii.brLg,
+                    borderSide: const BorderSide(
+                      color: AppColors.borderHairline,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: AppRadii.brLg,
+                    borderSide: const BorderSide(
+                      color: AppColors.borderHairline,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s12),
               SizedBox(
                 width: double.infinity,
                 child: SegmentedButton<_TrainingFilter>(
@@ -136,10 +182,10 @@ class _TrainingScreenState extends ConsumerState<TrainingScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.s12),
-              if (assignments.isEmpty)
-                const _EmptyPrograms()
+              if (visibleAssignments.isEmpty)
+                _EmptyPrograms(searching: _query.trim().isNotEmpty)
               else
-                ...assignments.map(
+                ...visibleAssignments.map(
                   (assignment) => Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.s12),
                     child: _AssignmentCard(
@@ -170,6 +216,71 @@ class _TrainingScreenState extends ConsumerState<TrainingScreen> {
       },
     );
   }
+
+  bool _matchesQuery(TrainingAssignment assignment) {
+    final query = _query.trim().toLowerCase();
+    return <String>[
+      assignment.programName,
+      assignment.shortDescription,
+      assignment.pharmacyName,
+      assignment.city,
+    ].any((value) => value.toLowerCase().contains(query));
+  }
+
+  int _compareAssignments(
+    TrainingAssignment left,
+    TrainingAssignment right,
+  ) {
+    if (_filter == _TrainingFilter.completed) {
+      final byCompletion = _dateDescending(
+        left.completedAt,
+        right.completedAt,
+      );
+      if (byCompletion != 0) return byCompletion;
+    }
+
+    final byStatus = _statusRank(left).compareTo(_statusRank(right));
+    if (byStatus != 0) return byStatus;
+    final byPriority = _priorityRank(left.priority).compareTo(
+      _priorityRank(right.priority),
+    );
+    if (byPriority != 0) return byPriority;
+    final byDeadline = _dateAscending(left.dueAt, right.dueAt);
+    if (byDeadline != 0) return byDeadline;
+    return left.programName.compareTo(right.programName);
+  }
+
+  int _statusRank(TrainingAssignment assignment) => switch (assignment.status) {
+        TrainingAssignmentStatus.overdue => 0,
+        TrainingAssignmentStatus.retakeRequired => 1,
+        TrainingAssignmentStatus.inProgress ||
+        TrainingAssignmentStatus.waitingOnline ||
+        TrainingAssignmentStatus.waitingTest ||
+        TrainingAssignmentStatus.waitingExam ||
+        TrainingAssignmentStatus.waitingEventSelection ||
+        TrainingAssignmentStatus.waitingOffline ||
+        TrainingAssignmentStatus.waitingAttendance ||
+        TrainingAssignmentStatus.waitingReview =>
+          2,
+        _ => 3,
+      };
+
+  int _priorityRank(TrainingPriority priority) => switch (priority) {
+        TrainingPriority.critical => 0,
+        TrainingPriority.high => 1,
+        TrainingPriority.normal => 2,
+        TrainingPriority.low => 3,
+      };
+
+  int _dateAscending(DateTime? left, DateTime? right) {
+    if (left == null && right == null) return 0;
+    if (left == null) return 1;
+    if (right == null) return -1;
+    return left.compareTo(right);
+  }
+
+  int _dateDescending(DateTime? left, DateTime? right) =>
+      _dateAscending(right, left);
 
   Future<void> _openAssignment(String assignmentId) async {
     await Navigator.of(context).push<void>(
@@ -581,7 +692,9 @@ class _CertificateRow extends StatelessWidget {
 }
 
 class _EmptyPrograms extends StatelessWidget {
-  const _EmptyPrograms();
+  const _EmptyPrograms({this.searching = false});
+
+  final bool searching;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -595,8 +708,12 @@ class _EmptyPrograms extends StatelessWidget {
             const Icon(Icons.school_outlined,
                 size: 36, color: AppColors.ink400),
             const SizedBox(height: AppSpacing.s8),
-            Text('В этой группе программ пока нет',
-                style: AppTypography.body14(), textAlign: TextAlign.center),
+            Text(
+                searching
+                    ? 'По вашему запросу ничего не найдено'
+                    : 'В этой группе программ пока нет',
+                style: AppTypography.body14(),
+                textAlign: TextAlign.center),
           ],
         ),
       );

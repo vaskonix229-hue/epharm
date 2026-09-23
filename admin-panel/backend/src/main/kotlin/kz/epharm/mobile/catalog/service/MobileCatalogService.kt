@@ -67,9 +67,9 @@ class MobileCatalogService(
             // exists.  This avoids Medusa's slow remote `q` path and keeps the picker
             // available during storefront outages.  Before the first successful crawl
             // we retain the direct call so a fresh installation still works immediately.
-            // The lightweight snapshot intentionally does not expand category-id
-            // relations; explicit category browsing remains a direct Medusa request.
-            val local = snapshot?.takeIf { category.isNullOrBlank() && it.hasCompleteSnapshot() }
+            // Category ids are stored in the snapshot as well, so every list/search
+            // variant remains available during a complete storefront outage.
+            val local = snapshot?.takeIf { it.hasCompleteSnapshot() }
                 ?.search(q = q, categoryId = category, limit = safeLimit, offset = safeOffset)
             val products: List<MedusaProduct>
             val total: Int
@@ -110,8 +110,11 @@ class MobileCatalogService(
         includeRetailFallbackPrices: Boolean = false,
     ): MobileCatalogDetailDto {
         val base = cache.get("detail|$id|retail=$includeRetailFallbackPrices") {
-            // Товар обязан существовать в Medusa — никаких карточек «из воздуха» (T5).
-            val p = medusa.getProduct(id)
+            // A complete snapshot is the authoritative read model.  Falling back
+            // to the live storefront only before the first successful crawl keeps
+            // product details available while Medusa is down.
+            val local = snapshot?.takeIf { it.hasCompleteSnapshot() }
+            val p = (if (local != null) local.findById(id) else medusa.getProduct(id))
                 ?: throw AppException(ErrorCode.NOT_FOUND, "Товар не найден", HttpStatus.NOT_FOUND)
             val detail = withRetailPriceFallback(
                 detailOf(p),
@@ -169,7 +172,9 @@ class MobileCatalogService(
     }
 
     fun categories(): List<MobileCategoryDto> = cache.get("categories") {
-        medusa.listCategories().productCategories.map {
+        val local = snapshot?.takeIf { it.hasCompleteSnapshot() }
+        val categories = if (local != null) local.categories() else medusa.listCategories().productCategories
+        categories.map {
             MobileCategoryDto(id = it.id, name = it.name, handle = it.handle, parentId = it.parentCategoryId)
         }
     }
@@ -183,10 +188,16 @@ class MobileCatalogService(
         val clean = ids.mapNotNull { it.trim().takeIf { s -> s.isNotBlank() } }.distinct()
         if (clean.isEmpty()) return emptyMap()
         return cache.get("cards|" + clean.sorted().joinToString(",")) {
-            // Medusa отдаёт максимум `limit` товаров — при >MAX_LIMIT id бьём на чанки и
-            // сливаем, иначе часть привязанных к промо товаров потерялась бы из выдачи.
-            clean.chunked(MAX_LIMIT)
-                .flatMap { chunk -> medusa.listProducts(ids = chunk, limit = chunk.size).products }
+            val local = snapshot?.takeIf { it.hasCompleteSnapshot() }
+            val products = if (local != null) {
+                local.findByIds(clean)
+            } else {
+                // Medusa отдаёт максимум `limit` товаров — при >MAX_LIMIT id бьём на чанки и
+                // сливаем, иначе часть привязанных к промо товаров потерялась бы из выдачи.
+                clean.chunked(MAX_LIMIT)
+                    .flatMap { chunk -> medusa.listProducts(ids = chunk, limit = chunk.size).products }
+            }
+            products
                 .associate { it.id to card(it) }
         }
     }

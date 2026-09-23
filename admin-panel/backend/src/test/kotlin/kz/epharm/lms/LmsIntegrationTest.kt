@@ -228,6 +228,47 @@ class LmsIntegrationTest {
     }
 
     @Test
+    fun `lesson material settings round-trip through admin API`() {
+        val created = mockMvc.perform(
+            post("/api/admin/lms/courses/crs_draft/lessons")
+                .header("Authorization", bearer)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """{"title":"Интерактив","kind":"interactive","externalUrl":"https://learn.example.org/module","required":false,"durationMin":7}""",
+                ),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.lessonItems[0].kind").value("interactive"))
+            .andExpect(jsonPath("$.lessonItems[0].externalUrl").value("https://learn.example.org/module"))
+            .andExpect(jsonPath("$.lessonItems[0].required").value(false))
+            .andExpect(jsonPath("$.lessonItems[0].minimumWatchPct").doesNotExist())
+            .andReturn()
+        val lessonId = objectMapper.readTree(created.response.contentAsString)
+            .path("lessonItems").path(0).path("id").asText()
+
+        mockMvc.perform(
+            patch("/api/admin/lms/courses/crs_draft/lessons/$lessonId")
+                .header("Authorization", bearer)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    """{"kind":"video","required":true,"minimumWatchPct":85,"externalUrl":""}""",
+                ),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.lessonItems[0].kind").value("video"))
+            .andExpect(jsonPath("$.lessonItems[0].externalUrl").doesNotExist())
+            .andExpect(jsonPath("$.lessonItems[0].required").value(true))
+            .andExpect(jsonPath("$.lessonItems[0].minimumWatchPct").value(85))
+
+        mockMvc.perform(
+            patch("/api/admin/lms/courses/crs_draft/lessons/$lessonId")
+                .header("Authorization", bearer)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"minimumWatchPct":101}"""),
+        ).andExpect(status().isBadRequest)
+    }
+
+    @Test
     fun `video upload and lesson reorder preserve all content`() {
         fun createLesson(title: String): String {
             val result = mockMvc.perform(
@@ -330,12 +371,29 @@ class LmsIntegrationTest {
         val attachmentId = objectMapper.readTree(uploaded.response.contentAsString)
             .path("lessonItems").path(0).path("attachments").path(0).path("id").asText()
 
+        val audio = MockMultipartFile(
+            "file",
+            "lesson.mp3",
+            "audio/mpeg",
+            byteArrayOf(0, 1, 2, 3),
+        )
+        mockMvc.perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .multipart("/api/admin/lms/courses/crs_draft/lessons/$lessonId/attachments")
+                .file(audio)
+                .param("title", "Аудиоверсия")
+                .header("Authorization", bearer),
+        )
+            .andExpect(status().isOk)
+            .andExpect(jsonPath("$.lessonItems[0].attachments[1].kind").value("audio"))
+
         mockMvc.perform(
             delete("/api/admin/lms/courses/crs_draft/lessons/$lessonId/attachments/$attachmentId")
                 .header("Authorization", bearer),
         )
             .andExpect(status().isOk)
-            .andExpect(jsonPath("$.lessonItems[0].attachments.length()").value(0))
+            .andExpect(jsonPath("$.lessonItems[0].attachments.length()").value(1))
+            .andExpect(jsonPath("$.lessonItems[0].attachments[0].title").value("Аудиоверсия"))
     }
 
     @Test

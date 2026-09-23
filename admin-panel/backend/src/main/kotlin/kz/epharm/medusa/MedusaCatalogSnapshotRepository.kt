@@ -1,6 +1,7 @@
 package kz.epharm.medusa
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import kz.epharm.medusa.dto.MedusaCategory
 import kz.epharm.medusa.dto.MedusaProduct
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Repository
@@ -177,6 +178,66 @@ class MedusaCatalogSnapshotRepository(
         )
         return Page(products = products, total = total)
     }
+
+    /**
+     * Returns one product from the last complete generation.  The complete
+     * payload is stored in PostgreSQL, so product details do not need a live
+     * Medusa request when the storefront is unavailable.
+     */
+    fun findById(id: String): MedusaProduct? {
+        val clean = id.trim()
+        if (clean.isEmpty()) return null
+        return jdbc.query(
+            """
+            SELECT payload::text
+              FROM medusa_catalog_products
+             WHERE sync_id = (SELECT active_sync_id FROM medusa_catalog_sync_state WHERE singleton = 1)
+               AND id = ?
+             LIMIT 1
+            """.trimIndent(),
+            { rs, _ -> objectMapper.readValue(rs.getString(1), MedusaProduct::class.java) },
+            clean,
+        ).firstOrNull()
+    }
+
+    /** Resolve a bounded set of product ids without touching the upstream. */
+    fun findByIds(ids: Collection<String>): List<MedusaProduct> {
+        val clean = ids.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        if (clean.isEmpty()) return emptyList()
+        val placeholders = clean.joinToString(",") { "?" }
+        return jdbc.query(
+            """
+            SELECT payload::text
+              FROM medusa_catalog_products
+             WHERE sync_id = (SELECT active_sync_id FROM medusa_catalog_sync_state WHERE singleton = 1)
+               AND id IN ($placeholders)
+             ORDER BY source_position, id
+            """.trimIndent(),
+            { rs, _ -> objectMapper.readValue(rs.getString(1), MedusaProduct::class.java) },
+            *clean.toTypedArray(),
+        )
+    }
+
+    /**
+     * Reconstruct the category directory from product payloads in the active
+     * generation.  Only categories used by at least one product are returned;
+     * that is the useful set for mobile catalogue filters during an outage.
+     */
+    fun categories(): List<MedusaCategory> = jdbc.query(
+        """
+        SELECT DISTINCT ON (category ->> 'id') category::text
+          FROM medusa_catalog_products product
+          CROSS JOIN LATERAL jsonb_array_elements(
+              COALESCE(product.payload -> 'categories', '[]'::jsonb)
+          ) AS category
+         WHERE product.sync_id = (
+             SELECT active_sync_id FROM medusa_catalog_sync_state WHERE singleton = 1
+         )
+           AND NULLIF(category ->> 'id', '') IS NOT NULL
+         ORDER BY category ->> 'id', category ->> 'name'
+        """.trimIndent(),
+        { rs, _ -> objectMapper.readValue(rs.getString(1), MedusaCategory::class.java) },
+    ).sortedWith(compareBy<MedusaCategory> { it.name.lowercase(Locale.ROOT) }.thenBy { it.id })
 
     private fun searchDocument(product: MedusaProduct): String {
         val values = mutableListOf<Any?>()

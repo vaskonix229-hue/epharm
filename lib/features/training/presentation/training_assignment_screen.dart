@@ -510,9 +510,7 @@ class _CourseLessons extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Icon(
-                            lesson.isVideo
-                                ? Icons.play_circle_outline_rounded
-                                : Icons.article_outlined,
+                            lessonKindIcon(lesson.kind),
                             size: 19,
                             color: AppColors.brandGreen700,
                           ),
@@ -528,17 +526,50 @@ class _CourseLessons extends StatelessWidget {
                               '${lesson.durationMin} мин.',
                               style: AppTypography.captionSmall(),
                             ),
+                          if (lesson.requiredLesson)
+                            const Padding(
+                              padding: EdgeInsets.only(left: AppSpacing.s8),
+                              child: Icon(
+                                Icons.verified_outlined,
+                                size: 16,
+                                color: AppColors.brandGreen700,
+                              ),
+                            ),
                         ],
                       ),
                       if (lesson.description.isNotEmpty) ...[
                         const SizedBox(height: AppSpacing.s4),
-                        Text(lesson.description, style: AppTypography.caption()),
+                        Text(lesson.description,
+                            style: AppTypography.caption()),
                       ],
+                      const SizedBox(height: AppSpacing.s4),
+                      Wrap(
+                        spacing: AppSpacing.s8,
+                        runSpacing: AppSpacing.s4,
+                        children: [
+                          Text(
+                            lessonKindLabel(lesson.kind),
+                            style: AppTypography.captionSmall(
+                              color: AppColors.brandGreen700,
+                            ),
+                          ),
+                          if (lesson.minimumWatchPct != null)
+                            Text(
+                              'Просмотр от ${lesson.minimumWatchPct}%',
+                              style: AppTypography.captionSmall(),
+                            ),
+                          if (!lesson.requiredLesson)
+                            Text(
+                              'Необязательно',
+                              style: AppTypography.captionSmall(),
+                            ),
+                        ],
+                      ),
                       if (lesson.content.isNotEmpty) ...[
                         const SizedBox(height: AppSpacing.s8),
                         Text(lesson.content, style: AppTypography.body14()),
                       ],
-                      if (lesson.videoUrl != null) ...[
+                      if (lesson.hasVideo) ...[
                         const SizedBox(height: AppSpacing.s8),
                         SizedBox(
                           height: 38,
@@ -549,6 +580,50 @@ class _CourseLessons extends StatelessWidget {
                               size: 18,
                             ),
                             label: const Text('Смотреть видео'),
+                          ),
+                        ),
+                      ],
+                      if (lesson.hasExternalMaterial) ...[
+                        const SizedBox(height: AppSpacing.s8),
+                        SizedBox(
+                          height: 38,
+                          child: OutlinedButton.icon(
+                            onPressed: () => onOpenUrl(lesson.externalUrl!),
+                            icon:
+                                const Icon(Icons.open_in_new_rounded, size: 18),
+                            label: Text(
+                              lesson.kind == 'interactive'
+                                  ? 'Открыть интерактив'
+                                  : 'Открыть материал',
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (lesson.attachments.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.s8),
+                        ...lesson.attachments.map(
+                          (attachment) => Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.s4,
+                            ),
+                            child: SizedBox(
+                              width: double.infinity,
+                              height: 38,
+                              child: OutlinedButton.icon(
+                                onPressed: attachment.mediaUrl.isEmpty
+                                    ? null
+                                    : () => onOpenUrl(attachment.mediaUrl),
+                                icon: Icon(
+                                  lessonAttachmentIcon(attachment),
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  attachment.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ],

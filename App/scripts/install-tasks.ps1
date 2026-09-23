@@ -102,6 +102,40 @@ function Get-ConfigProperty {
     return $property.Value
 }
 
+function Assert-UpdateManifestPublicKey {
+    param([string]$Base64)
+
+    # Keep this public fallback in sync with EpharmConfig. Legacy pharmacy configs
+    # omit the field; their signed updater still uses the key embedded in the app.
+    $embeddedSpki = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEd/4WWaCXDSf/Vc4dW8cLpJwy/5X8PwPsc87fHgOrAKNTkf3locuDh89KDGzhoB905myQwq9o15vFAeyvyPrLyQ=='
+    if ([string]::IsNullOrWhiteSpace($Base64)) {
+        $Base64 = $embeddedSpki
+    }
+
+    try {
+        $keyBytes = [Convert]::FromBase64String($Base64.Trim())
+    } catch {
+        throw "posm.json UpdateManifestPublicKeySpki is not valid Base64."
+    }
+
+    # DER SubjectPublicKeyInfo for an uncompressed ECDSA P-256 point. Windows
+    # PowerShell 5.1 cannot import SPKI directly; the POSM client performs the
+    # final cryptographic signature check before accepting any release.
+    [byte[]]$p256SpkiPrefix = @(
+        0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce,
+        0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d,
+        0x03, 0x01, 0x07, 0x03, 0x42, 0x00, 0x04
+    )
+    if ($keyBytes.Length -ne 91) {
+        throw "posm.json UpdateManifestPublicKeySpki must be an ECDSA P-256 SPKI key."
+    }
+    for ($i = 0; $i -lt $p256SpkiPrefix.Length; $i++) {
+        if ($keyBytes[$i] -ne $p256SpkiPrefix[$i]) {
+            throw "posm.json UpdateManifestPublicKeySpki must be an ECDSA P-256 SPKI key."
+        }
+    }
+}
+
 function Read-AndValidateConfig {
     param([string]$Path)
 
@@ -135,6 +169,8 @@ function Read-AndValidateConfig {
         }
     }
 
+    Assert-UpdateManifestPublicKey ([string](Get-ConfigProperty -Config $config -Name "updateManifestPublicKeySpki"))
+
     $screenMode = [string](Get-ConfigProperty -Config $config -Name "screenMode")
     $screenMode = $screenMode.Trim().ToLowerInvariant()
     if ($screenMode -notin @("dev", "prod")) {
@@ -146,8 +182,8 @@ function Read-AndValidateConfig {
     if (-not [Uri]::TryCreate($backendText, [UriKind]::Absolute, [ref]$backendUri)) {
         throw "backendBaseUrl is not an absolute URL: $backendText"
     }
-    if ($backendUri.Scheme -notin @("http", "https")) {
-        throw "backendBaseUrl must use http or https: $backendText"
+    if ($backendUri.Scheme -ne "https" -and -not ($backendUri.Scheme -eq "http" -and $backendUri.IsLoopback)) {
+        throw "backendBaseUrl must use HTTPS (HTTP is allowed only for loopback development): $backendText"
     }
     if ($backendUri.AbsolutePath -notin @("", "/")) {
         throw "backendBaseUrl must be an origin without /login or /api path: $backendText"
@@ -160,8 +196,9 @@ function Read-AndValidateConfig {
         if (-not [Uri]::TryCreate([string]$fallbackText, [UriKind]::Absolute, [ref]$fallbackUri)) {
             throw "backendFallbackBaseUrls contains an invalid URL: $fallbackText"
         }
-        if ($fallbackUri.Scheme -notin @("http", "https") -or $fallbackUri.AbsolutePath -notin @("", "/")) {
-            throw "backend fallback must be an http/https origin without /login or /api path: $fallbackText"
+        if (($fallbackUri.Scheme -ne "https" -and -not ($fallbackUri.Scheme -eq "http" -and $fallbackUri.IsLoopback)) -or
+            $fallbackUri.AbsolutePath -notin @("", "/")) {
+            throw "backend fallback must be an HTTPS origin (HTTP only for loopback) without /login or /api path: $fallbackText"
         }
     }
 

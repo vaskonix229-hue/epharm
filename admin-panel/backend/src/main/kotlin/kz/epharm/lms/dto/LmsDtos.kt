@@ -1,5 +1,6 @@
 package kz.epharm.lms.dto
 
+import jakarta.validation.constraints.Max
 import jakarta.validation.constraints.Min
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.NotEmpty
@@ -18,6 +19,9 @@ data class CourseLessonDto(
     val content: String,
     val kind: CourseLessonKind,
     val videoUrl: String?,
+    val externalUrl: String?,
+    val required: Boolean,
+    val minimumWatchPct: Int?,
     val attachments: List<CourseLessonAttachmentDto>,
     val durationMin: Int,
     val order: Int,
@@ -35,6 +39,9 @@ data class CourseLessonDto(
             content = entity.content,
             kind = entity.kind,
             videoUrl = entity.videoUrl,
+            externalUrl = entity.externalUrl,
+            required = entity.requiredLesson,
+            minimumWatchPct = entity.minimumWatchPct,
             attachments = attachments.map(CourseLessonAttachmentDto::of),
             durationMin = entity.durationMin,
             order = entity.order,
@@ -57,6 +64,7 @@ data class CourseLessonAttachmentDto(
         get() = when {
             contentType.startsWith("image/") -> "image"
             contentType.startsWith("video/") -> "video"
+            contentType.startsWith("audio/") -> "audio"
             else -> "document"
         }
 
@@ -181,6 +189,12 @@ data class CreateCourseLessonRequest(
     @field:Size(max = 50_000)
     val content: String = "",
     val kind: CourseLessonKind = CourseLessonKind.text,
+    @field:Size(max = 2000)
+    val externalUrl: String? = null,
+    val required: Boolean = true,
+    @field:Min(0)
+    @field:Max(100)
+    val minimumWatchPct: Int? = null,
     @field:Min(0)
     val durationMin: Int = 0,
 )
@@ -193,6 +207,13 @@ data class UpdateCourseLessonRequest(
     @field:Size(max = 50_000)
     val content: String? = null,
     val kind: CourseLessonKind? = null,
+    @field:Size(max = 2000)
+    val externalUrl: String? = null,
+    val required: Boolean? = null,
+    @field:Min(0)
+    @field:Max(100)
+    val minimumWatchPct: Int? = null,
+    val clearMinimumWatchPct: Boolean = false,
     @field:Min(0)
     val durationMin: Int? = null,
     val clearVideo: Boolean = false,

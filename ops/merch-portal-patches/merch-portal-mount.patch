@@ -1,0 +1,246 @@
+diff --git a/vite.config.mjs b/vite.config.mjs
+index 7bffb2d..20ceea0 100644
+--- a/vite.config.mjs
++++ b/vite.config.mjs
+@@ -5,6 +5,8 @@ export default defineConfig(({ mode }) => {
+   const environment = loadEnv(mode, process.cwd(), "");
+   const apiProxyTarget = environment.PHARMACY_CRM_API_PROXY_TARGET ?? `http://127.0.0.1:${environment.API_PORT || 4173}`;
+   return ({
++  // A single build is served at /staff directly and at /merch/staff behind ePharm.
++  base: "./",
+   resolve: {
+     preserveSymlinks: true,
+   },
+diff --git a/src/api.js b/src/api.js
+index b193e56..2f91346 100644
+--- a/src/api.js
++++ b/src/api.js
+@@ -1,6 +1,7 @@
+ import { formatSystemMessage } from "./systemMessage.js";
++import { apiBaseForPath } from "./portalPaths.js";
+ 
+-const apiBase = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
++const apiBase = apiBaseForPath(window.location.pathname, import.meta.env.VITE_API_URL);
+ const tokenKey = "pharmacy-crm-session";
+ 
+ let authToken = window.localStorage.getItem(tokenKey) ?? "";
+diff --git a/src/main.jsx b/src/main.jsx
+index 1511d9f..fa8d3f3 100644
+--- a/src/main.jsx
++++ b/src/main.jsx
+@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
+ import { App } from "./App.jsx";
+ import { StaffPortal } from "./StaffPortal.jsx";
+ import { PublicTaskDispatchPortal } from "./PublicTaskDispatch.jsx";
++import { appPathForPath, mountPrefixForPath } from "./portalPaths.js";
+ import "leaflet/dist/leaflet.css";
+ import "./styles.css";
+ import "./minimal-redesign.css";
+@@ -10,8 +11,13 @@ import "./platform-redesign.css";
+ import "./catalog-showcase.css";
+ import "./mobile-platform.css";
+ 
+-const taskAccess = window.location.pathname.startsWith("/staff") && new URLSearchParams(window.location.search).has("task");
+-const RootApplication = taskAccess ? PublicTaskDispatchPortal : window.location.pathname.startsWith("/staff") ? StaffPortal : App;
++const appPath = appPathForPath(window.location.pathname);
++const isStaffRoute = appPath.startsWith("/staff");
++const taskAccess = isStaffRoute && (
++  Boolean(mountPrefixForPath(window.location.pathname)) ||
++  new URLSearchParams(window.location.search).has("task")
++);
++const RootApplication = taskAccess ? PublicTaskDispatchPortal : isStaffRoute ? StaffPortal : App;
+ const yandexApiKey = import.meta.env.VITE_YANDEX_MAPS_API_KEY?.trim();
+ 
+ if (yandexApiKey && window.location.hostname === "127.0.0.1") {
+diff --git a/src/PublicTaskDispatch.jsx b/src/PublicTaskDispatch.jsx
+index a9e0f72..2b553ac 100644
+--- a/src/PublicTaskDispatch.jsx
++++ b/src/PublicTaskDispatch.jsx
+@@ -23,6 +23,7 @@ import {
+   uploadPublicTaskEvidence,
+ } from "./api.js";
+ import { preparePhotoUpload } from "./imageUpload.js";
++import { publicMediaUrlForPath, staffPathForPath } from "./portalPaths.js";
+ import './publicTaskQueue.css';
+ 
+ const deadlineFormat = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "long", hour: "2-digit", minute: "2-digit" });
+@@ -79,14 +80,14 @@ function PublicTaskCard({ task, editable, access, problemReason, onProblem, onCh
+       </header>
+       {task.reviewNote && <div className="public-task-revision"><Info /><span><strong>Задание возвращено</strong><small>{task.reviewNote} · Прикрепите новое фото после исправления. Предыдущие фотографии сохранены в истории.</small></span></div>}
+       <div className="public-task-context">
+-        {task.referenceImageUrl && <figure><img src={task.referenceImageUrl} alt={`Эталон полки ${task.shelfCode || ""}`} /><figcaption><Eye /> Как должно выглядеть</figcaption></figure>}
++        {task.referenceImageUrl && <figure><img src={publicMediaUrlForPath(task.referenceImageUrl, window.location.pathname)} alt={`Эталон полки ${task.shelfCode || ""}`} /><figcaption><Eye /> Как должно выглядеть</figcaption></figure>}
+         <div><h3>Что сделать</h3><p>{task.description || "Выполните поручение по инструкции и приложите подтверждение."}</p></div>
+       </div>
+       {!!task.checklist?.length && <section className="public-task-checklist"><h3>Чек-лист</h3>{task.checklist.map((item) => <button type="button" disabled={!editable || busyTask === task.id || Boolean(problemReason)} className={item.completed ? "done" : ""} onClick={() => toggleChecklist(item)} key={item.id}><i>{item.completed && <Check />}</i><span>{item.title}</span></button>)}</section>}
+       <section className="public-task-photos">
+         <div><h3>Фотографии</h3><span>{task.attachments?.length ?? 0} из {problemReason ? 1 : task.requiredPhotoCount} минимум</span></div>
+         <div className="public-task-photo-grid">
+-          {(task.attachments ?? []).map((photo) => <a href={photo.url} target="_blank" rel="noreferrer" key={photo.id}><img src={photo.url} alt="Фото выполнения" /><span><CheckCircle /> Загружено</span></a>)}
++          {(task.attachments ?? []).map((photo) => <a href={publicMediaUrlForPath(photo.url, window.location.pathname)} target="_blank" rel="noreferrer" key={photo.id}><img src={publicMediaUrlForPath(photo.url, window.location.pathname)} alt="Фото выполнения" /><span><CheckCircle /> Загружено</span></a>)}
+           {editable && <button type="button" disabled={busyTask === task.id} onClick={() => cameraInputRef.current?.click()}><Camera /><strong>{busyTask === task.id ? "Загружаем..." : "Сфотографировать"}</strong><small>Открыть камеру</small></button>}
+           {editable && <button type="button" disabled={busyTask === task.id} onClick={() => galleryInputRef.current?.click()}><Images /><strong>{busyTask === task.id ? "Загружаем..." : "Выбрать из галереи"}</strong><small>Можно выбрать несколько фото</small></button>}
+         </div>
+@@ -142,7 +143,7 @@ export function PublicTaskDispatchPortal() {
+     try {
+       const result = await fetchPublicTaskQueue(access, id);
+       const destination = new URL(result.url, window.location.origin);
+-      if (destination.origin !== window.location.origin || destination.pathname !== '/staff') throw new Error('Некорректная ссылка задания');
++      if (destination.origin !== window.location.origin || destination.pathname !== staffPathForPath(window.location.pathname)) throw new Error('Некорректная ссылка задания');
+       window.location.assign(destination.href);
+     } catch (error) { setError(error.message); setSubmitting(false); }
+   };
+diff --git a/src/portalPaths.js b/src/portalPaths.js
+new file mode 100644
+index 0000000..dd4008f
+--- /dev/null
++++ b/src/portalPaths.js
+@@ -0,0 +1,27 @@
++const MERCH_MOUNT = "/merch";
++const publicMediaPath = /^\/api\/(?:placement-files|task-files|request-item-files)\//;
++const publicStaticMediaPath = /^\/pharmacy-shelf\.png$/;
++
++export function mountPrefixForPath(pathname) {
++  return pathname === MERCH_MOUNT || pathname.startsWith(`${MERCH_MOUNT}/`)
++    ? MERCH_MOUNT
++    : "";
++}
++
++export function appPathForPath(pathname) {
++  return pathname.slice(mountPrefixForPath(pathname).length) || "/";
++}
++
++export function staffPathForPath(pathname) {
++  return `${mountPrefixForPath(pathname)}/staff`;
++}
++
++export function apiBaseForPath(pathname, configuredBase = "") {
++  return (mountPrefixForPath(pathname) || configuredBase || "").replace(/\/$/, "");
++}
++
++export function publicMediaUrlForPath(url, pathname) {
++  return typeof url === "string" && (publicMediaPath.test(url) || publicStaticMediaPath.test(url))
++    ? `${mountPrefixForPath(pathname)}${url}`
++    : url;
++}
+diff --git a/src/catalogCities.js b/src/catalogCities.js
+new file mode 100644
+index 0000000..f6f1d2c
+--- /dev/null
++++ b/src/catalogCities.js
+@@ -0,0 +1,9 @@
++// Recovered from the currently served, pre-existing production bundle.
++const UNKNOWN_CITY_VALUES = new Set(["", "—", "-", "ан", "аш", "елик", "ен", "имова", "кунаева", "урова"]);
++
++export function catalogCity(value) {
++  const city = String(value || "").trim().replace(/^г[.\s]+/i, "").trim();
++  if (UNKNOWN_CITY_VALUES.has(city.toLocaleLowerCase("ru"))) return "Город требует уточнения";
++  if (/^(усть[\s-]*каменогорск|өскемен|оскемен)$/i.test(city)) return "Усть-Каменогорск";
++  return city;
++}
+diff --git a/scripts/test_public_merch_mount.mjs b/scripts/test_public_merch_mount.mjs
+new file mode 100644
+index 0000000..4871076
+--- /dev/null
++++ b/scripts/test_public_merch_mount.mjs
+@@ -0,0 +1,39 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import {
++  apiBaseForPath,
++  appPathForPath,
++  mountPrefixForPath,
++  publicMediaUrlForPath,
++  staffPathForPath,
++} from "../src/portalPaths.js";
++
++test("direct dev URL keeps root paths", () => {
++  assert.equal(mountPrefixForPath("/staff"), "");
++  assert.equal(appPathForPath("/staff"), "/staff");
++  assert.equal(staffPathForPath("/staff"), "/staff");
++  assert.equal(apiBaseForPath("/staff"), "");
++  assert.equal(publicMediaUrlForPath("/api/task-files/example.jpg", "/staff"), "/api/task-files/example.jpg");
++});
++
++test("ePharm QR URL uses the merch mount for API and media", () => {
++  assert.equal(mountPrefixForPath("/merch/staff"), "/merch");
++  assert.equal(appPathForPath("/merch/staff"), "/staff");
++  assert.equal(staffPathForPath("/merch/staff"), "/merch/staff");
++  assert.equal(apiBaseForPath("/merch/staff"), "/merch");
++  assert.equal(apiBaseForPath("/merch/staff", "https://api.example.test/"), "/merch");
++  assert.equal(publicMediaUrlForPath("/pharmacy-shelf.png", "/merch/staff"), "/merch/pharmacy-shelf.png");
++  for (const kind of ["placement-files", "task-files", "request-item-files"]) {
++    assert.equal(
++      publicMediaUrlForPath(`/api/${kind}/example.jpg`, "/merch/staff"),
++      `/merch/api/${kind}/example.jpg`,
++    );
++  }
++});
++
++test("mount matching is exact and does not rewrite external URLs", () => {
++  assert.equal(mountPrefixForPath("/merchandising/staff"), "");
++  assert.equal(publicMediaUrlForPath("https://cdn.example.test/image.jpg", "/merch/staff"), "https://cdn.example.test/image.jpg");
++  assert.equal(publicMediaUrlForPath("/api/private/secret", "/merch/staff"), "/api/private/secret");
++  assert.equal(apiBaseForPath("/staff", "https://api.example.test/"), "https://api.example.test");
++});
+diff --git a/scripts/test_public_merch_build.mjs b/scripts/test_public_merch_build.mjs
+new file mode 100644
+index 0000000..5a2b71d
+--- /dev/null
++++ b/scripts/test_public_merch_build.mjs
+@@ -0,0 +1,18 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++
++const indexPath = fileURLToPath(new URL("../dist/index.html", import.meta.url));
++
++test("one production build loads assets at both /staff and /merch/staff", () => {
++  const html = readFileSync(indexPath, "utf8");
++  assert.match(html, /src="\.\/assets\//);
++  assert.match(html, /href="\.\/assets\//);
++  assert.doesNotMatch(html, /(?:src|href)="\/assets\//);
++
++  for (const pathname of ["/staff", "/merch/staff"]) {
++    const assetBase = new URL("./assets/", `https://example.test${pathname}`).pathname;
++    assert.equal(assetBase, pathname === "/staff" ? "/assets/" : "/merch/assets/");
++  }
++});
+diff --git a/scripts/test_catalog_cities_recovery.mjs b/scripts/test_catalog_cities_recovery.mjs
+new file mode 100644
+index 0000000..a72454f
+--- /dev/null
++++ b/scripts/test_catalog_cities_recovery.mjs
+@@ -0,0 +1,18 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { catalogCity } from "../src/catalogCities.js";
++
++test("recovered catalog city normalizes the production bundle's known aliases", () => {
++  assert.equal(catalogCity("г. Алматы"), "Алматы");
++  assert.equal(catalogCity("г Усть-Каменогорск"), "Усть-Каменогорск");
++  assert.equal(catalogCity("Өскемен"), "Усть-Каменогорск");
++  assert.equal(catalogCity("оскемен"), "Усть-Каменогорск");
++  assert.equal(catalogCity("г. Астана"), "Астана");
++});
++
++test("recovered catalog city preserves the exact bundle's unknown-value set", () => {
++  for (const unknown of ["", "—", "-", "ан", "аш", "елик", "ен", "имова", "кунаева", "урова"]) {
++    assert.equal(catalogCity(unknown), "Город требует уточнения", unknown);
++  }
++  assert.equal(catalogCity(null), "Город требует уточнения");
++});
+diff --git a/package.json b/package.json
+index 80ce1b6..e53f685 100644
+--- a/package.json
++++ b/package.json
+@@ -37,7 +37,7 @@
+     "qrcode": "^1.5.4",
+     "react": "19.2.3",
+     "react-dom": "19.2.3",
+     "react-leaflet": "5.0.0",
+-    "vite": "6.4.1"
++    "vite": "6.4.3"
+   }
+ }

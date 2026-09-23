@@ -13,7 +13,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react'
-import { Button, Drawer, Empty, Field, IconButton, Input, Modal, Select, useToast } from '@/ui'
+import { Button, Drawer, Empty, Field, IconButton, Input, Modal, Select, Toggle, useToast } from '@/ui'
 import type { CourseDto, CourseLessonDto, CourseLessonKind, CourseStatus } from '@/lib/api-types'
 import {
   useCourse,
@@ -27,6 +27,23 @@ import {
   useUploadCourseLessonAttachment,
 } from '@/lib/queries/lms'
 import { describeError } from '@/lib/describeError'
+
+const lessonKindOptions: { value: CourseLessonKind; label: string }[] = [
+  { value: 'text', label: 'Текстовый материал' },
+  { value: 'video', label: 'Видеоурок' },
+  { value: 'pdf', label: 'PDF' },
+  { value: 'presentation', label: 'Презентация' },
+  { value: 'image', label: 'Изображение' },
+  { value: 'audio', label: 'Аудио' },
+  { value: 'link', label: 'Внешняя ссылка' },
+  { value: 'interactive', label: 'Интерактив' },
+  { value: 'quiz', label: 'Внешний тест' },
+  { value: 'practice', label: 'Практическое задание' },
+]
+
+function lessonKindLabel(kind: CourseLessonKind) {
+  return lessonKindOptions.find((option) => option.value === kind)?.label ?? 'Материал'
+}
 
 interface CourseEditorDrawerProps {
   courseId: string | null
@@ -231,8 +248,7 @@ export function CourseEditorDrawer({
                             {index + 1}. {lesson.title}
                           </div>
                           <div className="mt-0.5 text-[12px] text-ink-500">
-                            {lesson.kind === 'video' ? 'Видеоурок' : 'Текстовый урок'} ·{' '}
-                            {lesson.durationMin} мин.
+                            {lessonKindLabel(lesson.kind)} · {lesson.durationMin} мин.
                           </div>
                           {lesson.description && (
                             <p className="mt-2 line-clamp-2 text-[12px] leading-5 text-ink-600">
@@ -348,6 +364,11 @@ function LessonEditorModal({
   const [description, setDescription] = useState(lesson?.description ?? '')
   const [content, setContent] = useState(lesson?.content ?? '')
   const [kind, setKind] = useState<CourseLessonKind>(lesson?.kind ?? 'text')
+  const [externalUrl, setExternalUrl] = useState(lesson?.externalUrl ?? '')
+  const [requiredLesson, setRequiredLesson] = useState(lesson?.required ?? true)
+  const [minimumWatchPct, setMinimumWatchPct] = useState(
+    lesson?.minimumWatchPct == null ? '' : String(lesson.minimumWatchPct),
+  )
   const [durationMin, setDurationMin] = useState(String(lesson?.durationMin ?? 0))
   const [file, setFile] = useState<File | null>(null)
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([])
@@ -367,6 +388,16 @@ function LessonEditorModal({
       return setError('Размер видео не должен превышать 60 МБ')
     if (attachmentFiles.some((attachment) => attachment.size > 25 * 1024 * 1024))
       return setError('Размер каждого вложения не должен превышать 25 МБ')
+    const parsedMinimumWatchPct = minimumWatchPct === '' ? null : Number(minimumWatchPct)
+    if (
+      kind === 'video' &&
+      parsedMinimumWatchPct != null &&
+      (!Number.isInteger(parsedMinimumWatchPct) ||
+        parsedMinimumWatchPct < 0 ||
+        parsedMinimumWatchPct > 100)
+    ) {
+      return setError('Минимальный просмотр должен быть целым числом от 0 до 100')
+    }
     setError(null)
     try {
       let lessonId = persistedId
@@ -375,13 +406,21 @@ function LessonEditorModal({
         description: description.trim(),
         content: content.trim(),
         kind,
+        externalUrl: externalUrl.trim(),
+        required: requiredLesson,
+        minimumWatchPct:
+          kind === 'video' && parsedMinimumWatchPct != null ? parsedMinimumWatchPct : undefined,
         durationMin: Number(durationMin) || 0,
       }
       if (lessonId) {
         await update.mutateAsync({
           courseId: course.id,
           lessonId,
-          patch: { ...payload, clearVideo: kind === 'text' },
+          patch: {
+            ...payload,
+            clearVideo: kind !== 'video',
+            clearMinimumWatchPct: kind !== 'video' || minimumWatchPct === '',
+          },
         })
       } else {
         const saved = await create.mutateAsync({ courseId: course.id, lesson: payload })
@@ -442,10 +481,7 @@ function LessonEditorModal({
               value={kind}
               disabled={!canManage}
               onChange={(value) => setKind(value as CourseLessonKind)}
-              options={[
-                { value: 'text', label: 'Текстовый материал' },
-                { value: 'video', label: 'Видеоурок' },
-              ]}
+              options={lessonKindOptions}
             />
           </Field>
           <Field label="Длительность, минут">
@@ -458,6 +494,50 @@ function LessonEditorModal({
             />
           </Field>
         </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field
+            label="Внешняя ссылка"
+            optional
+            hint="Для ссылки, интерактива, внешнего теста или материала"
+          >
+            <Input
+              type="url"
+              value={externalUrl}
+              disabled={!canManage}
+              placeholder="https://…"
+              onChange={(event) => setExternalUrl(event.target.value)}
+            />
+          </Field>
+          {kind === 'video' ? (
+            <Field label="Минимальный просмотр, %" optional>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={minimumWatchPct}
+                disabled={!canManage}
+                onChange={(event) => setMinimumWatchPct(event.target.value)}
+              />
+            </Field>
+          ) : (
+            <div className="flex items-end pb-2">
+              <Toggle
+                on={requiredLesson}
+                onChange={setRequiredLesson}
+                label="Обязательный урок"
+                disabled={!canManage}
+              />
+            </div>
+          )}
+        </div>
+        {kind === 'video' && (
+          <Toggle
+            on={requiredLesson}
+            onChange={setRequiredLesson}
+            label="Обязательный урок"
+            disabled={!canManage}
+          />
+        )}
         <Field label="Краткое описание" optional>
           <textarea
             className="inp min-h-20"
@@ -504,7 +584,7 @@ function LessonEditorModal({
         <Field
           label="Материалы урока"
           optional
-          hint="Изображения, PDF, Word, Excel, PowerPoint или текст; до 25 МБ каждый"
+          hint="Изображения, аудио, PDF, Word, Excel, PowerPoint или текст; до 25 МБ каждый"
         >
           <label className="flex min-h-20 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-ink-300 bg-paper-hover px-4 text-[13px] font-semibold text-ink-600 hover:border-brand-green-600">
             <Paperclip size={18} />
@@ -517,7 +597,7 @@ function LessonEditorModal({
               className="sr-only"
               type="file"
               multiple
-              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+              accept="image/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.mp3,.m4a,.aac,.wav,.ogg"
               disabled={!canManage}
               onChange={(event) => setAttachmentFiles(Array.from(event.target.files ?? []))}
             />

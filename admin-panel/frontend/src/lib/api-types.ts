@@ -644,7 +644,19 @@ export interface LiftSummaryDto {
 
 // ─── LMS (Этап 3.6) — обучающие курсы ───
 export type CourseStatus = 'published' | 'draft' | 'archived'
-export type CourseLessonKind = 'text' | 'video'
+export type CourseLessonKind =
+  | 'text'
+  | 'video'
+  | 'pdf'
+  | 'presentation'
+  | 'image'
+  | 'audio'
+  | 'link'
+  | 'interactive'
+  | 'quiz'
+  | 'test'
+  | 'practice'
+  | 'assignment'
 
 export interface CourseLessonAttachmentDto {
   id: string
@@ -654,7 +666,7 @@ export interface CourseLessonAttachmentDto {
   mediaUrl: string
   sizeBytes: number
   createdAt: string
-  kind: 'image' | 'video' | 'document'
+  kind: 'image' | 'video' | 'audio' | 'document'
 }
 
 export interface CourseLessonDto {
@@ -664,6 +676,9 @@ export interface CourseLessonDto {
   content: string
   kind: CourseLessonKind
   videoUrl: string | null
+  externalUrl: string | null
+  required: boolean
+  minimumWatchPct: number | null
   attachments: CourseLessonAttachmentDto[]
   durationMin: number
   order: number
@@ -712,6 +727,9 @@ export interface CreateCourseLessonRequest {
   description?: string
   content?: string
   kind?: CourseLessonKind
+  externalUrl?: string
+  required?: boolean
+  minimumWatchPct?: number
   durationMin?: number
 }
 
@@ -720,6 +738,10 @@ export interface UpdateCourseLessonRequest {
   description?: string
   content?: string
   kind?: CourseLessonKind
+  externalUrl?: string
+  required?: boolean
+  minimumWatchPct?: number
+  clearMinimumWatchPct?: boolean
   durationMin?: number
   clearVideo?: boolean
 }

@@ -111,6 +111,9 @@ class CourseService(
             title = req.title.trim(),
             description = req.description.trim(),
             content = req.content.trim(),
+            externalUrl = req.externalUrl?.trim()?.takeIf(String::isNotEmpty),
+            requiredLesson = req.required,
+            minimumWatchPct = req.minimumWatchPct.takeIf { req.kind == CourseLessonKind.video },
             durationMin = req.durationMin,
             order = current.size,
         ).also { it.kind = req.kind }
@@ -129,14 +132,21 @@ class CourseService(
         }
         req.description?.let { lesson.description = it.trim() }
         req.content?.let { lesson.content = it.trim() }
+        req.externalUrl?.let { lesson.externalUrl = it.trim().takeIf(String::isNotEmpty) }
+        req.required?.let { lesson.requiredLesson = it }
+        if (req.clearMinimumWatchPct) lesson.minimumWatchPct = null
+        req.minimumWatchPct?.let { lesson.minimumWatchPct = it }
         req.durationMin?.let { lesson.durationMin = it }
 
         var obsoleteVideo: String? = null
-        if (req.clearVideo || req.kind == CourseLessonKind.text) {
+        if (req.clearVideo || (req.kind != null && req.kind != CourseLessonKind.video)) {
             obsoleteVideo = lesson.videoUrl
             lesson.videoUrl = null
         }
-        req.kind?.let { lesson.kind = it }
+        req.kind?.let {
+            lesson.kind = it
+            if (it != CourseLessonKind.video) lesson.minimumWatchPct = null
+        }
         lessonRepository.save(lesson)
         syncAggregates(courseId)
         obsoleteVideo?.let(::registerAfterCommitCleanup)
@@ -301,7 +311,7 @@ class CourseService(
         if (extension !in SUPPORTED_ATTACHMENT_EXTENSIONS ||
             (contentType.isNotBlank() && contentType !in SUPPORTED_ATTACHMENT_TYPES)
         ) {
-            invalid("Поддерживаются изображения, PDF, Word, Excel, PowerPoint и текстовые файлы")
+            invalid("Поддерживаются изображения, аудио, PDF, Word, Excel, PowerPoint и текстовые файлы")
         }
     }
 
@@ -334,7 +344,7 @@ class CourseService(
         val SUPPORTED_VIDEO_EXTENSIONS = setOf("mp4", "webm")
         val SUPPORTED_ATTACHMENT_EXTENSIONS = setOf(
             "jpg", "jpeg", "png", "webp", "gif", "pdf", "doc", "docx",
-            "xls", "xlsx", "ppt", "pptx", "txt", "csv",
+            "xls", "xlsx", "ppt", "pptx", "txt", "csv", "mp3", "m4a", "aac", "wav", "ogg",
         )
         val SUPPORTED_ATTACHMENT_TYPES = setOf(
             "image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf",
@@ -344,7 +354,8 @@ class CourseService(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             "application/vnd.ms-powerpoint",
             "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "text/plain", "text/csv", "application/octet-stream",
+            "text/plain", "text/csv", "audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/aac",
+            "audio/wav", "audio/x-wav", "audio/ogg", "application/ogg", "application/octet-stream",
         )
     }
 }

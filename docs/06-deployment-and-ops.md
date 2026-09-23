@@ -14,11 +14,9 @@ Current shared environment:
 The intended public setup is one host with path routing: `epharm.inkar.kz`. Do not configure separate
 `api`, `admin`, or `s3` domains unless DNS, `.env.prod`, and `Caddyfile` are changed together.
 
-Current external-gateway state (verified 2026-07-21): TLS presents the expired `*.inteq.kz`
-certificate (expired 2026-05-23) and HTTPS `/api/health` returns `404`, while the
-trusted HTTP ingress `:8060/api/health` returns `200`. This proves that the application upstream is
-reachable but Host/SNI routing on `2.133.92.203:443` remains incomplete. IT must fix the external
-listener; application deployment alone cannot repair that gateway.
+The 2026-07-21 expired-certificate/404 finding is historical. On 2026-09-23 the public HTTPS
+`/api/health` and TLS verification passed. Recheck the certificate, SNI and public health for each
+release; the trusted `:8060` ingress is not an acceptable POSM client endpoint.
 
 ## Production Stack
 
@@ -44,7 +42,12 @@ Current `Caddyfile` intentionally uses one site block for `{$ADMIN_DOMAIN}` and 
 
 - `/s3/*` -> MinIO with prefix stripped;
 - `/api/*` -> backend;
+- exact `/merch/staff`, allowlisted staff assets, task API and media -> merchandising portal;
 - everything else -> frontend.
+
+The merchandising server credential must use HTTPS when the upstream is outside the private
+INKAR network. The public QR portal is a separate browser route with a deny-by-default allowlist;
+it must never proxy CRM admin/auth endpoints or carry `X-Pharmapay-Key` from a browser.
 
 Public TLS uses the INKAR-issued wildcard certificate, not ACME: public DNS terminates on the
 corporate ingress and Let's Encrypt challenges cannot reach this host reliably. The server keeps
@@ -172,9 +175,8 @@ recent restore-test are visible in monitoring.
 
 ## Known Operational Risks
 
-- External `epharm.inkar.kz:443` currently has the wrong expired certificate and returns gateway
-  `404`; POSM can use `:8060` only from
-  pharmacy networks that permit that outbound port.
+- The historical HTTPS gateway outage is resolved in the 2026-09-23 audit, but public TLS and
+  `/api/health` remain release gates. Remote `:8060` HTTP is rejected by current POSM.
 - The temporary HTTP metadata fallback is not a final trust boundary: an attacker able to alter both
   release metadata and its SHA-256 could redirect an old client to another HTTPS archive. Repair the
   external HTTPS ingress, remove the HTTP fallback, and add a pinned signing key for update manifests

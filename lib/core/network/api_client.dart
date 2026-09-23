@@ -32,12 +32,15 @@ class ApiClient {
     http.Client? client,
     String? baseUrl,
     List<String>? fallbackBaseUrls,
+    Duration requestTimeout = const Duration(seconds: 20),
   })  : _client = client ?? http.Client(),
-        _baseUrls = _resolveBaseUrls(baseUrl, fallbackBaseUrls);
+        _baseUrls = _resolveBaseUrls(baseUrl, fallbackBaseUrls),
+        _requestTimeout = requestTimeout;
 
   final http.Client _client;
   final TokenStore _tokenStore;
   final List<String> _baseUrls;
+  final Duration _requestTimeout;
   int _activeBaseUrlIndex = 0;
 
   /// In-flight refresh для дедупликации (single-flight): пока он не null, все
@@ -213,7 +216,7 @@ class ApiClient {
 
     for (var attempts = 0; attempts < _baseUrls.length; attempts++) {
       try {
-        return await request();
+        return await request().timeout(_requestTimeout);
       } catch (error, stackTrace) {
         lastError = error;
         lastStackTrace = stackTrace;

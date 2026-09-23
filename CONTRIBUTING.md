@@ -106,3 +106,11 @@ Do not merge with known red checks unless the failure is explicitly triaged and 
 Some existing docs contain live credentials by project decision. Do not move, duplicate, quote, or
 paste those values elsewhere. If a secret leaks into a new place, rotate it rather than trying to
 hide the symptom.
+
+Private signing keys, integration keys, passwords, and recovery codes must never be committed,
+attached to a PR or release, placed in a public artifact, or printed in build/test/deploy logs.
+Keep the local release-key inventory under the Git-ignored `secrets/` directory with owner-only
+permissions; record purpose, custodian, path, public-key fingerprint, and rotation procedure there,
+not secret values in tracked documents. A production POSM release must use the existing offline
+signing key whose public SPKI matches the trust anchor already embedded in deployed clients;
+generating a replacement key is not a substitute for recovering the original key.
