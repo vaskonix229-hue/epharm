@@ -11,6 +11,11 @@ name: Mobile TestFlight
         description: Monotonically increasing App Store build number
         required: true
         type: string
+      upload_to_testflight:
+        description: Upload the signed IPA to TestFlight after retaining the artifact
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -24,7 +29,7 @@ concurrency:
 
 jobs:
   build-and-upload:
-    name: Build, sign and upload iOS
+    name: Build and sign iOS
     runs-on: macos-15
     environment: mobile-production
     steps:
@@ -136,7 +141,16 @@ jobs:
             echo 'Sentry auth is not configured; skipping dSYM upload.'
           fi
 
+      - name: Retain IPA for release audit
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: epharm-ios-${{ inputs.release_tag }}-${{ inputs.build_number }}
+          path: build/ios/ipa/*.ipa
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Upload to TestFlight
+        if: ${{ inputs.upload_to_testflight }}
         env:
           ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -148,11 +162,3 @@ jobs:
           IPA_PATH=$(find build/ios/ipa -maxdepth 1 -name '*.ipa' -print -quit)
           test -n "$IPA_PATH"
           xcrun altool --upload-app --type ios --file "$IPA_PATH" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
-
-      - name: Retain IPA for release audit
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: epharm-ios-${{ inputs.release_tag }}-${{ inputs.build_number }}
-          path: build/ios/ipa/*.ipa
-          if-no-files-found: error
-          retention-days: 30
