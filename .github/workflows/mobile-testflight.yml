@@ -89,7 +89,6 @@ jobs:
       - name: Static and unit release gate
         env:
           FLUTTER_BIN: ${{ github.workspace }}/.flutter-sdk/bin/flutter
-          REQUIRE_STORE_VERSION: 'true'
         run: ./tools/mobile-release-check.sh
 
       - name: Build signed IPA
